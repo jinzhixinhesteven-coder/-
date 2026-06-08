@@ -16,7 +16,11 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 
-from skill_prompt import RESTAURANT_ADVISOR_SKILL
+# 兼容两种启动方式：本地 python main.py，云端 uvicorn backend.main:app
+try:
+    from skill_prompt import RESTAURANT_ADVISOR_SKILL   # 本地从 backend/ 内运行
+except ImportError:
+    from backend.skill_prompt import RESTAURANT_ADVISOR_SKILL  # 从项目根运行
 
 # ============ 读取你的 DeepSeek API Key ============
 # 优先从环境变量读取（更安全）；没有就读 config.json
@@ -32,8 +36,15 @@ def load_api_key():
 
 API_KEY = load_api_key()
 
-# DeepSeek 兼容 OpenAI 接口，只需改 base_url
-client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+# 重要：不在这里创建 OpenAI 客户端。
+# 如果在模块加载时就创建，一旦出问题(网络/代理/密钥)，整个服务会启动失败(Render 报 status 1)。
+# 改为"用到时才创建"，保证服务总能正常启动、网页总能打开。
+_client = None
+def get_client():
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+    return _client
 
 app = FastAPI(title="智餐经营")
 
@@ -50,7 +61,7 @@ async def diagnose(request: Request):
             yield "（还没有配置 DeepSeek API Key。请在 backend/config.json 里填入你的 key，或设置环境变量 DEEPSEEK_API_KEY。配置后重启即可使用真实 AI。）"
             return
         try:
-            stream = client.chat.completions.create(
+            stream = get_client().chat.completions.create(
                 model="deepseek-chat",  # 即 DeepSeek-V4-Flash
                 messages=[
                     {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
@@ -82,7 +93,7 @@ async def chat(request: Request):
             yield "（还没有配置 DeepSeek API Key，无法回答。请先在 backend/config.json 填入 key 并重启。）"
             return
         try:
-            stream = client.chat.completions.create(
+            stream = get_client().chat.completions.create(
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
@@ -102,22 +113,37 @@ async def chat(request: Request):
 
 
 # ============ 托管前端网页 ============
-# 把 frontend 文件夹作为静态网页托管，访问根地址就能打开 app
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+# 自动寻找 frontend 文件夹，兼容本地运行和云端部署两种情况。
+# 本地：从 backend/ 运行，frontend 在上一层 (../frontend)
+# 云端(Render根目录部署)：当前目录就是项目根，frontend 在 ./frontend
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_CANDIDATES = [
+    os.path.join(_HERE, "..", "frontend"),   # backend/ 的上一层
+    os.path.join(_HERE, "frontend"),          # backend/ 里面（少见）
+    os.path.join(os.getcwd(), "frontend"),    # 当前工作目录下
+]
+FRONTEND_DIR = next((p for p in _CANDIDATES if os.path.isdir(p)), None)
 
 
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    if FRONTEND_DIR:
+        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+    return {"status": "ok", "msg": "后端运行中，但没找到 frontend 文件夹。请确认部署时包含了 frontend。"}
 
 
-app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="static")
+# 只有找到了 frontend 才挂载静态文件，避免因路径不存在导致启动崩溃(status 1)
+if FRONTEND_DIR:
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 if __name__ == "__main__":
     import uvicorn
+    # 本地用 8000；云端(Render)会通过环境变量 PORT 指定端口
+    port = int(os.environ.get("PORT", 8000))
     print("=" * 50)
     print("智餐经营 启动中…")
-    print("启动后，用浏览器打开： http://127.0.0.1:8000")
+    print(f"前端目录：{FRONTEND_DIR or '（未找到）'}")
+    print(f"本地访问： http://127.0.0.1:{port}")
     print("=" * 50)
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=port)
