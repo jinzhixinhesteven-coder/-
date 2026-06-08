@@ -227,7 +227,7 @@ PAGES.entry=()=>{const last=lastRecord();const t=TY();
     <div class="card"><h3>最近 7 天</h3>
       <table><tr><th>日期</th><th>营业额</th><th>来客</th><th>利润</th></tr>
       ${recent.map(r=>`<tr><td>${r.date.slice(5)}</td><td>¥${fmt(r.rev)}</td><td>${r.traffic}</td><td style="color:${dayProfit(r)>=0?'var(--gr)':'var(--rd)'};font-weight:700">¥${fmt(dayProfit(r))}</td></tr>`).join('')}</table>
-      <button class="btn ghost sm" style="margin-top:14px" onclick="if(confirm('恢复示范数据？')){localStorage.removeItem(DBK);DB=load();render();toast('已恢复示范数据');}">↺ 恢复示范数据</button>
+      <button class="btn ghost sm" style="margin-top:14px" onclick="if(confirm('清空所有数据，从头开始？此操作不可撤销。')){localStorage.removeItem(DBK);DB=load();render();toast('已清空，可以重新开始了');}">🗑️ 清空所有数据重新开始</button>
     </div>
   </div>`;
 };
@@ -302,7 +302,8 @@ PAGES.dishes=()=>{setTimeout(()=>{renderDishesPage();renderDishQuad('dishQuad');
 function renderDishesPage(){const dm=dishMetrics();const cls=classifyDishes();const rm={};cls.forEach(c=>rm[c.name]=c);
   document.getElementById('dishWrap').innerHTML=`
     <table><tr><th>菜品</th><th>售价</th><th>成本</th><th>毛利率</th><th>月销量</th><th>月利润贡献</th><th>类型</th><th></th></tr>
-    ${dm.map((d,i)=>{const c=rm[d.name];return `<tr><td>${d.name}</td>
+    ${dm.map((d,i)=>{const c=rm[d.name];return `<tr>
+      <td><input class="editnum" style="width:110px" type="text" value="${d.name.replace(/"/g,'&quot;')}" onchange="updateDishName(${i},this.value)"></td>
       <td><input class="editnum" type="number" value="${d.price}" onchange="updateDish(${i},'price',this.value)"></td>
       <td><input class="editnum" type="number" value="${d.cost}" onchange="updateDish(${i},'cost',this.value)"></td>
       <td><b style="color:${d.margin>=60?'var(--gr)':d.margin>=45?'var(--yl)':'var(--rd)'}">${d.margin}%</b></td>
@@ -327,10 +328,14 @@ PAGES.ai=()=>{const m=aggregate(periodRecords('month'));
 };
 async function runDiagnose(m){
   const el=document.getElementById('aiStream');const meta=document.getElementById('aiMeta');
-  el.innerHTML='<span class="cursor"></span>';
+  // 友好的等待动画，避免看起来卡住（DeepSeek 思考+首屏可能要几秒到几十秒）
+  let dots=0,waiting=true;
+  el.innerHTML='<span style="color:var(--mut)">🤔 AI 正在分析你的经营数据<span id="aiDots">.</span></span>';
+  const wt=setInterval(()=>{if(!waiting)return;dots=(dots+1)%4;const e=document.getElementById('aiDots');if(e)e.textContent='.'.repeat(dots+1);},400);
   const payload=aiPayload(m);
   let got=false,buf='';
-  const ok=await streamFromBackend('/api/diagnose',payload,(txt)=>{got=true;buf+=txt;el.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';});
+  const ok=await streamFromBackend('/api/diagnose',payload,(txt)=>{if(!got){waiting=false;clearInterval(wt);}got=true;buf+=txt;el.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';});
+  waiting=false;clearInterval(wt);
   if(ok&&got){el.innerHTML=mdToHtml(buf);meta.textContent='DeepSeek 实时生成 · 基于近 30 天数据';}
   else{ // 兜底：内置引擎
     streamLocal(el,diagTokens(m),()=>{document.getElementById('aiReport').innerHTML=aiReportCards(m);});
@@ -369,10 +374,12 @@ PAGES.chat=()=>{setTimeout(initChat,60);
     <div class="chat-input"><input id="chatIn" placeholder="例如：如何提升利润？" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn" onclick="sendChat()">发送</button></div></div>`;
 };
 function pushMsg(t,who){const box=document.getElementById('chatbox');const d=document.createElement('div');d.className='msg '+who;d.innerHTML=t;box.appendChild(d);box.scrollTop=box.scrollHeight;return d;}
-async function aiReplyChat(q){const m=aggregate(periodRecords('month'));const d=pushMsg('<span class="cursor"></span>','a');
+async function aiReplyChat(q){const m=aggregate(periodRecords('month'));const d=pushMsg('<span style="color:var(--mut)">🤔 思考中<span id="cDots">.</span></span>','a');
+  let dots=0,waiting=true;const wt=setInterval(()=>{if(!waiting)return;dots=(dots+1)%4;const e=document.getElementById('cDots');if(e)e.textContent='.'.repeat(dots+1);},400);
   const payload={question:q,store:aiPayload(m)};let buf='';let got=false;
-  const ok=await streamFromBackend('/api/chat',payload,(txt)=>{got=true;buf+=txt;d.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';
+  const ok=await streamFromBackend('/api/chat',payload,(txt)=>{if(!got){waiting=false;clearInterval(wt);}got=true;buf+=txt;d.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';
     d.parentElement.scrollTop=d.parentElement.scrollHeight;});
+  waiting=false;clearInterval(wt);
   if(ok&&got){d.innerHTML=mdToHtml(buf);}
   else{const ans=aiExpertLocal(q,m);let i=0;(function step(){i+=4;if(i>=ans.length){d.innerHTML=ans;return;}d.innerHTML=ans.slice(0,i).replace(/<[^>]*$/,'')+'<span class="cursor"></span>';setTimeout(step,15);})();}
 }
@@ -424,7 +431,8 @@ function addEntry(){const t=TY();const date=document.getElementById('e_date').va
   const recs=S().records;const idx=recs.findIndex(r=>r.date===date);if(idx>=0)recs[idx]=rec;else recs.push(rec);
   save();toast('已保存，数据已更新');setTimeout(()=>goto('home'),500);}
 function delRec(d){S().records=S().records.filter(r=>r.date!==d);save();render();toast('已删除');}
-function updateDish(i,f,v){S().dishes[i][f]=+v;renderDishesPage();renderDishQuad('dishQuad');}
+function updateDish(i,f,v){S().dishes[i][f]=+v;save();renderDishesPage();renderDishQuad('dishQuad');}
+function updateDishName(i,v){S().dishes[i].name=(v||'').trim()||'未命名';save();renderDishesPage();renderDishQuad('dishQuad');}
 function delDish(i){S().dishes.splice(i,1);save();renderDishesPage();renderDishQuad('dishQuad');toast('已删除');}
 function addDish(){S().dishes.push({name:'新菜品',price:20,cost:7,qty:300});save();renderDishesPage();renderDishQuad('dishQuad');}
 function saveDishes(){save();toast('已保存');}

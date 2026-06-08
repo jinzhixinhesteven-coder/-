@@ -65,10 +65,11 @@ async def diagnose(request: Request):
                 model="deepseek-chat",  # 即 DeepSeek-V4-Flash
                 messages=[
                     {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
-                    {"role": "user", "content": f"这是我餐厅最近的经营数据，请诊断并给出增收建议：\n{store_data}"},
+                    {"role": "user", "content": f"这是我餐厅最近的经营数据，请简洁诊断并给出 2-3 条增收建议（控制在 400 字内）：\n{store_data}"},
                 ],
                 stream=True,
                 temperature=0.7,
+                max_tokens=700,   # 限制长度，让 AI 更快出结果
             )
             for chunk in stream:
                 delta = chunk.choices[0].delta.content
@@ -97,10 +98,11 @@ async def chat(request: Request):
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
-                    {"role": "user", "content": f"我店的经营数据：{store_data}\n\n我的问题：{question}"},
+                    {"role": "user", "content": f"我店的经营数据：{store_data}\n\n我的问题：{question}\n\n请简洁直接地回答（控制在 300 字内）。"},
                 ],
                 stream=True,
                 temperature=0.7,
+                max_tokens=600,
             )
             for chunk in stream:
                 delta = chunk.choices[0].delta.content
