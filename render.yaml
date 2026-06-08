@@ -1,0 +1,13 @@
+# Render 自动部署配置。
+# 把整个项目(backend + frontend 都要)传到 GitHub，在 Render 用 Blueprint 部署。
+# 关键：从“项目根目录”部署（不是 backend），这样 frontend 文件夹也在，前端才能被托管。
+services:
+  - type: web
+    name: zhican
+    runtime: python
+    # 不设 rootDir，默认就是项目根目录，backend 和 frontend 都在
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false   # 部署时在 Render 网页的 Environment 里手动填你的密钥
