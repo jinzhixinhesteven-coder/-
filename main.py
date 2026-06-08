@@ -113,16 +113,23 @@ async def chat(request: Request):
 
 
 # ============ 托管前端网页 ============
-# 自动寻找 frontend 文件夹，兼容本地运行和云端部署两种情况。
-# 本地：从 backend/ 运行，frontend 在上一层 (../frontend)
-# 云端(Render根目录部署)：当前目录就是项目根，frontend 在 ./frontend
+# 自动寻找前端文件(index.html 所在的文件夹)，兼容各种部署布局：
+#   - 标准结构：frontend 在 backend 上一层 (../frontend)
+#   - 单文件夹平铺：所有文件(含 index.html)和 main.py 在同一个文件夹
+#   - 其他常见位置
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _CANDIDATES = [
-    os.path.join(_HERE, "..", "frontend"),   # backend/ 的上一层
-    os.path.join(_HERE, "frontend"),          # backend/ 里面（少见）
+    os.path.join(_HERE, "..", "frontend"),   # backend/ 的上一层（标准结构）
+    os.path.join(_HERE, "frontend"),          # backend/ 里面
     os.path.join(os.getcwd(), "frontend"),    # 当前工作目录下
+    _HERE,                                     # 和 main.py 同一个文件夹（平铺布局）
+    os.getcwd(),                               # 当前工作目录本身
 ]
-FRONTEND_DIR = next((p for p in _CANDIDATES if os.path.isdir(p)), None)
+# 只认"里面真的有 index.html"的那个文件夹
+FRONTEND_DIR = next(
+    (p for p in _CANDIDATES if os.path.isfile(os.path.join(p, "index.html"))),
+    None,
+)
 
 
 @app.get("/")
