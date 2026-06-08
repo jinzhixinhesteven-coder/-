@@ -133,6 +133,21 @@ async function streamFromBackend(url,payload,onChunk){
     return true;
   }catch(e){return false;}
 }
+// 把 AI 返回的 Markdown 转成可读的 HTML（标题/加粗/列表/分隔线）
+function mdToHtml(md){
+  if(!md)return '';
+  let h=md
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')  // 安全转义
+    .replace(/^### (.*)$/gm,'<div style="font-weight:700;color:#fff;margin:10px 0 4px;font-size:15px">$1</div>')
+    .replace(/^## (.*)$/gm,'<div style="font-weight:800;color:var(--br2);margin:14px 0 6px;font-size:16px">$1</div>')
+    .replace(/^# (.*)$/gm,'<div style="font-weight:800;color:var(--br2);margin:14px 0 6px;font-size:17px">$1</div>')
+    .replace(/\*\*(.+?)\*\*/g,'<b style="color:var(--br2)">$1</b>')   // 加粗
+    .replace(/^\s*[-*]\s+(.*)$/gm,'<div style="margin:3px 0 3px 14px">• $1</div>') // 列表
+    .replace(/^\s*\d+\.\s+(.*)$/gm,'<div style="margin:4px 0 4px 10px">$1</div>') // 有序列表
+    .replace(/^---+$/gm,'<hr style="border:none;border-top:1px solid var(--bd);margin:12px 0">') // 分隔线
+    .replace(/\n{2,}/g,'<br><br>').replace(/\n/g,'<br>');
+  return h;
+}
 
 let charts={};
 function killCharts(){Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});charts={};}
@@ -296,7 +311,7 @@ function renderDishesPage(){const dm=dishMetrics();const cls=classifyDishes();co
       <td><button class="btn ghost sm" onclick="delDish(${i})">删</button></td></tr>`;}).join('')}
     <tr style="border-top:2px solid var(--bd2)"><td><b>合计</b></td><td></td><td></td><td><b style="color:var(--br2)">${menuGrossMargin()}%</b></td>
       <td><b>${fmt(dm.reduce((a,d)=>a+d.qty,0))}</b></td><td><b style="color:var(--gr)">¥${fmt(dm.reduce((a,d)=>a+d.monthProfit,0))}</b></td><td></td><td></td></tr></table>
-    <div class="note">整店加权毛利率 ${menuGrossMargin()}%（目标 ≥${TY().grossTarget}%）。修改价格可实时看合计利润变化。</div>`;
+    <div class="note">整店加权毛利率 ${menuGrossMargin()}%（目标 ≥${TY().grossTarget}%）。修改价格可实时看合计利润变化。<br>💡 "类型"是相对比较：明星/走量/潜力/滞销 是把每道菜和全店平均水平对比得出的，所以改一道菜，其他菜的类型可能跟着微调，这是正常的——它帮你看清"谁比谁更值得主推或下架"。</div>`;
   const adv={明星菜:'高毛利高销量，放菜单首位重点推荐，是利润支柱',走量菜:'销量高但毛利低，可小幅提价或降本，因销量大效果放大',潜力菜:'毛利高但销量低，加强推荐、改名换图把它卖动',滞销菜:'毛利低又滞销，考虑下架或重新设计，节省备料与库存'};
   const g={};cls.forEach(c=>{(g[c.cat]=g[c.cat]||[]).push(c.name);});
   document.getElementById('dishAdvice').innerHTML=Object.entries(g).map(([cat,ns])=>{const tag={明星菜:'jun',走量菜:'chen',潜力菜:'zuo',滞销菜:'shi'}[cat];
@@ -314,11 +329,11 @@ async function runDiagnose(m){
   const el=document.getElementById('aiStream');const meta=document.getElementById('aiMeta');
   el.innerHTML='<span class="cursor"></span>';
   const payload=aiPayload(m);
-  let got=false;
-  const ok=await streamFromBackend('/api/diagnose',payload,(txt)=>{got=true;el.innerHTML=(el.dataset.t=(el.dataset.t||'')+txt)+'<span class="cursor"></span>';});
-  if(ok&&got){el.innerHTML=el.dataset.t;meta.textContent='DeepSeek 实时生成 · 基于近 30 天数据';}
+  let got=false,buf='';
+  const ok=await streamFromBackend('/api/diagnose',payload,(txt)=>{got=true;buf+=txt;el.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';});
+  if(ok&&got){el.innerHTML=mdToHtml(buf);meta.textContent='DeepSeek 实时生成 · 基于近 30 天数据';}
   else{ // 兜底：内置引擎
-    el.dataset.t='';streamLocal(el,diagTokens(m),()=>{document.getElementById('aiReport').innerHTML=aiReportCards(m);});
+    streamLocal(el,diagTokens(m),()=>{document.getElementById('aiReport').innerHTML=aiReportCards(m);});
     meta.textContent='本地模式 · 启动后端可接 DeepSeek';
   }
   document.getElementById('aiChips').innerHTML=['怎么降成本？','哪道菜该提价？','如何提升客单价？'].map(c=>`<span class="chip" onclick="goto('chat');setTimeout(()=>askPreset(\`${c}\`),250)">💬 ${c}</span>`).join('');
@@ -356,9 +371,9 @@ PAGES.chat=()=>{setTimeout(initChat,60);
 function pushMsg(t,who){const box=document.getElementById('chatbox');const d=document.createElement('div');d.className='msg '+who;d.innerHTML=t;box.appendChild(d);box.scrollTop=box.scrollHeight;return d;}
 async function aiReplyChat(q){const m=aggregate(periodRecords('month'));const d=pushMsg('<span class="cursor"></span>','a');
   const payload={question:q,store:aiPayload(m)};let buf='';let got=false;
-  const ok=await streamFromBackend('/api/chat',payload,(txt)=>{got=true;buf+=txt;d.innerHTML=buf+'<span class="cursor"></span>';
+  const ok=await streamFromBackend('/api/chat',payload,(txt)=>{got=true;buf+=txt;d.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';
     d.parentElement.scrollTop=d.parentElement.scrollHeight;});
-  if(ok&&got){d.innerHTML=buf;}
+  if(ok&&got){d.innerHTML=mdToHtml(buf);}
   else{const ans=aiExpertLocal(q,m);let i=0;(function step(){i+=4;if(i>=ans.length){d.innerHTML=ans;return;}d.innerHTML=ans.slice(0,i).replace(/<[^>]*$/,'')+'<span class="cursor"></span>';setTimeout(step,15);})();}
 }
 function aiExpertLocal(q,m){const ct=costTarget(m);const cls=classifyDishes();
@@ -416,7 +431,9 @@ function saveDishes(){save();toast('已保存');}
 function saveStore(){const s=S();s.name=document.getElementById('s_name').value;const nt=document.getElementById('s_type').value;const ch=nt!==s.type;s.type=nt;
   s.area=+document.getElementById('s_area').value;s.seats=+document.getElementById('s_seats').value;
   s.rent=+document.getElementById('s_rent').value;s.fixedOther=+document.getElementById('s_other').value;
-  save();updateTypeTag();toast(ch?'业态已切换':'已保存');render();}
+  save();updateTypeTag();toast('已保存，去录入今天的数据吧');
+  // 保存后直接引导去录入数据（尤其新用户还没有数据时）
+  if(!S().records.length){setTimeout(()=>goto('entry'),600);}else{render();}}
 function switchType(){const s=S();const ns=newStore(s.type);ns.name=s.name;ns.area=s.area;ns.seats=s.seats;ns.rent=s.rent;
   DB.stores[DB.activeStore]=ns;save();updateTypeTag();toast('已按 '+TYPES[s.type].label+' 重置');render();}
 function updateTypeTag(){const t=TY();const el=document.getElementById('typeTag');if(el)el.innerHTML=`<span class="logo">${t.icon}</span><span>${t.label}</span>`;}
