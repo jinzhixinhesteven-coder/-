@@ -46,7 +46,12 @@ function newStore(type){const t=TYPES[type];
   return {name:`我的${t.label}店`,type,area:type==='精致正餐'?260:type==='快餐'?120:160,
     seats:type==='精致正餐'?80:60,rent:type==='精致正餐'?60000:18000,fixedOther:0.06,
     dishes:seedDishes(type),records:seedRecords(type)};}
-function seed(){return {activeStore:0,stores:[newStore("快餐")]};}
+function seed(){
+  return {activeStore:0,stores:[{
+    name:"我的店", type:"快餐", area:120, seats:60, rent:18000, fixedOther:0.06,
+    dishes:[], records:[]    // 空的，让用户自己录
+  }]};
+}
 let DB=load();
 function load(){try{const s=localStorage.getItem(DBK);if(s){const o=JSON.parse(s);if(o.stores&&o.stores[0].records.length)return o;}}catch(e){}const d=seed();localStorage.setItem(DBK,JSON.stringify(d));return d;}
 function save(){localStorage.setItem(DBK,JSON.stringify(DB));}
