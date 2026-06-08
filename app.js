@@ -149,7 +149,20 @@ function cmpBox(label,base){const today=dayProfit(lastRecord());
   const ch=pctChange(today,base);const cls=ch>=0?'up':'down',a=ch>=0?'▲':'▼';
   return `<div class="cmp"><div class="ck">${label}</div><div class="cv ${cls}">${a} ${Math.abs(ch).toFixed(0)}% <span class="muted" style="font-weight:500">(¥${fmt(base)})</span></div></div>`;}
 
+/* 没有数据时的友好欢迎页（新用户第一次打开）*/
+function emptyState(title,desc){
+  return `<div class="card" style="text-align:center;padding:50px 24px">
+    <div style="font-size:46px;margin-bottom:12px">📝</div>
+    <h3 style="justify-content:center;font-size:18px">${title}</h3>
+    <div class="sub" style="margin:8px auto 20px;max-width:380px">${desc}</div>
+    <button class="btn" onclick="goto('settings')">① 先填门店信息</button>
+    <button class="btn" style="margin-left:10px" onclick="goto('entry')">② 录入今天的数据</button>
+    <div class="note" style="margin-top:18px">填了第一笔数据后，这里就会显示你的利润、图表和 AI 诊断。</div>
+  </div>`;
+}
+
 PAGES.home=()=>{
+  if(!S().records.length)return emptyState('欢迎使用智餐经营 👋','还没有数据。先到「门店设置」填好你的店，再到「录入数据」记下今天的营业额和来客数，系统就会自动帮你算利润、出报告。');
   const last=lastRecord();const today=dayProfit(last);const m=aggregate(periodRecords('month'));const [mi,mt]=motivLine();
   setTimeout(()=>{renderMoneyFlow(last);renderProfitBars('homeBars');},80);
   return `
@@ -176,7 +189,9 @@ PAGES.home=()=>{
 };
 
 /* ===== 录入数据 ===== */
-PAGES.entry=()=>{const last=lastRecord();const nd=new Date(last.date);nd.setDate(nd.getDate()+1);const t=TY();
+PAGES.entry=()=>{const last=lastRecord();const t=TY();
+  // 有数据就默认填下一天，没数据(新用户)就默认今天
+  const nd=last?new Date(last.date):new Date();if(last)nd.setDate(nd.getDate()+1);
   setTimeout(()=>{document.getElementById('e_date').value=nd.toISOString().slice(0,10);},40);
   const recent=recsSorted().slice(-7).reverse();
   let extra='';
@@ -211,6 +226,7 @@ PAGES.report=()=>{setTimeout(renderReport,60);
 };
 function renderReport(){const recs=periodRecords(curPeriod),prev=prevPeriodRecords(curPeriod);
   const m=aggregate(recs),pm=prev.length?aggregate(prev):null;
+  if(!m){document.getElementById('reportBody').innerHTML=emptyState('还没有数据','录入几天的营业额后，这里会自动生成日报、周报、月报。');return;}
   const pl={day:'昨日',week:'上周',month:'上月',quarter:'上季',year:'去年'}[curPeriod];
   const ch=(c,b)=>{if(!b)return'';const v=pctChange(c,b);return `<span class="${v>=0?'up':'down'}" style="font-size:13px">${v>=0?'▲':'▼'}${Math.abs(v).toFixed(0)}%</span>`;};
   const kc=(l,v,c,s)=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v} ${c}</div><div class="bench">${s}</div></div>`;
@@ -289,6 +305,7 @@ function renderDishesPage(){const dm=dishMetrics();const cls=classifyDishes();co
 
 /* ===== AI 诊断（真实后端 + 兜底）===== */
 PAGES.ai=()=>{const m=aggregate(periodRecords('month'));
+  if(!m)return emptyState('还没有数据','录入几天的经营数据后，AI 才能帮你诊断。先去「录入数据」。');
   setTimeout(()=>runDiagnose(m),100);
   return `<div class="aihero"><div class="ai-head"><div class="ai-av">🤖</div><div><div class="ai-nm">AI 餐饮顾问 · 经营诊断</div><div class="ai-mt" id="aiMeta">分析中…</div></div></div>
     <div class="ai-stream" id="aiStream"></div><div class="chips" id="aiChips"></div></div><div id="aiReport"></div>`;
@@ -357,6 +374,8 @@ function aiExpertLocal(q,m){const ct=costTarget(m);const cls=classifyDishes();
 function sendChat(){const inp=document.getElementById('chatIn');const q=inp.value.trim();if(!q)return;pushMsg(q,'u');inp.value='';aiReplyChat(q);}
 function askPreset(q){pushMsg(q,'u');aiReplyChat(q);}
 function initChat(){const m=aggregate(periodRecords('month'));const box=document.getElementById('chatbox');box.innerHTML='';
+  if(!m){pushMsg(`你好，我是你的 AI 餐饮顾问。你还没录入数据，先到「录入数据」记几天的营业额，我就能结合你的真实情况给建议了。`,'a');
+    document.getElementById('chatChips').innerHTML='';return;}
   pushMsg(`你好，我是你的 AI 餐饮顾问。我已了解 <b>${S().name}</b>（${m.t.label}）近 30 天数据，净利率 ${m.netP}%。有什么经营问题，请直接问我。`,'a');
   document.getElementById('chatChips').innerHTML=['本月经营情况如何？','如何提升利润？','怎么降成本？','哪道菜该提价？'].map(c=>`<span class="chip" onclick="askPreset(\`${c}\`)">${c}</span>`).join('');}
 
