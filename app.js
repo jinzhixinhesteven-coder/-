@@ -345,10 +345,22 @@ async function runDiagnose(m){
   if(ok&&got)document.getElementById('aiReport').innerHTML=aiReportCards(m);
 }
 // 给 AI 的结构化数据
-function aiPayload(m){return {业态:m.t.label,营业额:m.rev,净利润:m.profit,净利率:m.netP+'%',毛利率:m.gross+'%',
-  食材成本率:m.foodP+'%',人力成本率:m.laborP+'%',主成本:m.prime+'%',总成本:m.totalCostP+'%',客单价:m.avg,
-  来客数:m.traffic,天数:m.days,出餐速度:m.speed?m.speed+'秒':'不适用',
-  菜品:classifyDishes().map(d=>({菜名:d.name,毛利率:d.margin+'%',月销量:d.qty,类型:d.cat}))};}
+function aiPayload(m){
+  const p={业态:m.t.label,统计天数:m.days,营业额:m.rev,净利润:m.profit,净利率:m.netP+'%',毛利率:m.gross+'%',
+    食材成本率:m.foodP+'%',人力成本率:m.laborP+'%',房租占比:m.rentP+'%',水电杂费占比:m.otherP+'%',
+    主成本:m.prime+'%',总成本:m.totalCostP+'%',客单价:m.avg,来客数:m.traffic,
+    出餐速度:m.speed?m.speed+'秒':'不适用',
+    本店健康标准:{食材:m.b.food.join('-')+'%',人力:m.b.labor.join('-')+'%',主成本上限:m.b.prime[1]+'%',
+      房租:m.b.rent.join('-')+'%',净利率:m.b.net.join('-')+'%',菜单毛利率目标:m.t.grossTarget+'%',
+      ...(m.t.hasSpeed?{[m.t.speedName+'上限']:m.b.speed[1]+'秒'}:{})},
+    菜品:classifyDishes().map(d=>({菜名:d.name,售价:d.price,单份成本:d.cost,毛利率:d.margin+'%',月销量:d.qty,类型:d.cat}))};
+  // 环比上月（有历史数据才带上，避免 AI 凭空编趋势）
+  const prev=aggregate(prevPeriodRecords('month'));
+  if(prev&&prev.rev>0){const pc=v=>v===null?'无':(v>=0?'+':'')+v.toFixed(1)+'%';
+    p.环比上月={营业额:pc(pctChange(m.rev,prev.rev)),净利润:pc(pctChange(m.profit,prev.profit)),
+      来客数:pc(pctChange(m.traffic,prev.traffic)),客单价:pc(pctChange(m.avg,prev.avg)),
+      说明:'本期'+m.days+'天 vs 上期'+prev.days+'天'};}
+  return p;}
 function diagTokens(m){const t=[];const push=(s,tag)=>t.push({s,tag});const ct=costTarget(m);
   push('结论：本月营业额 ');push('¥'+fmt(m.rev),'b');push('，净利润 ');push('¥'+fmt(m.profit),'b');push('，净利率 '+m.netP+'%。');
   if(ct.monthExtra>500){push('主要问题在成本——');push('偏高','hl');push('。食材成本率 '+m.foodP+'%、人力成本率 '+m.laborP+'%。');

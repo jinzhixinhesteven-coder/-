@@ -65,11 +65,11 @@ async def diagnose(request: Request):
                 model="deepseek-chat",  # 即 DeepSeek-V4-Flash
                 messages=[
                     {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
-                    {"role": "user", "content": f"这是我餐厅最近的经营数据，请简洁诊断并给出 2-3 条增收建议（控制在 400 字内）：\n{store_data}"},
+                    {"role": "user", "content": f"这是我餐厅最近的经营数据，请按手册的【输出格式】A 给出经营诊断：\n{store_data}"},
                 ],
                 stream=True,
-                temperature=0.7,
-                max_tokens=700,   # 限制长度，让 AI 更快出结果
+                temperature=0.4,  # 低温度让数字判断更稳定一致
+                max_tokens=1200,  # 手册已限制 450 字内；这里只是兜底，防止句子被截断
             )
             for chunk in stream:
                 delta = chunk.choices[0].delta.content
@@ -98,11 +98,11 @@ async def chat(request: Request):
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
-                    {"role": "user", "content": f"我店的经营数据：{store_data}\n\n我的问题：{question}\n\n请简洁直接地回答（控制在 300 字内）。"},
+                    {"role": "user", "content": f"我店的经营数据：{store_data}\n\n我的问题：{question}"},
                 ],
                 stream=True,
-                temperature=0.7,
-                max_tokens=600,
+                temperature=0.4,  # 低温度让数字判断更稳定一致
+                max_tokens=600,   # 手册已限制 200 字内；这里只是兜底
             )
             for chunk in stream:
                 delta = chunk.choices[0].delta.content
