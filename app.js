@@ -319,13 +319,25 @@ function renderDishesPage(){const dm=dishMetrics();const cls=classifyDishes();co
     return `<div style="margin-bottom:13px"><span class="tag ${tag}">${cat}</span> <span class="muted">${ns.join('、')}</span><div style="font-size:13.5px;color:#c8d3e4;margin-top:5px;line-height:1.5">${adv[cat]}</div></div>`;}).join('');
 }
 
-/* ===== AI 诊断（真实后端 + 兜底）===== */
+/* ===== AI 诊断（真实后端 + 兜底；结果缓存，数据没变不重复诊断）===== */
+function diagSig(m){return JSON.stringify([m.rev,m.profit,m.days,m.traffic,(S().dishes||[]).map(d=>[d.name,d.price,d.cost,d.qty])]);}
 PAGES.ai=()=>{const m=aggregate(periodRecords('month'));
   if(!m)return emptyState('还没有数据','录入几天的经营数据后，AI 才能帮你诊断。先去「录入数据」。');
-  setTimeout(()=>runDiagnose(m),100);
+  const cached=S().lastDiag&&S().lastDiag.sig===diagSig(m)?S().lastDiag:null;
+  setTimeout(()=>{cached?showCachedDiag(m,cached):runDiagnose(m);},100);
   return `<div class="aihero"><div class="ai-head"><div class="ai-av">🤖</div><div><div class="ai-nm">AI 餐饮顾问 · 经营诊断</div><div class="ai-mt" id="aiMeta">分析中…</div></div></div>
     <div class="ai-stream" id="aiStream"></div><div class="chips" id="aiChips"></div></div><div id="aiReport"></div>`;
 };
+function diagChips(extra){return ['怎么降成本？','哪道菜该提价？','如何提升客单价？'].map(c=>`<span class="chip" onclick="goto('chat');setTimeout(()=>askPreset(\`${c}\`),250)">💬 ${c}</span>`).join('')+(extra||'');}
+function showCachedDiag(m,cached){ // 数据没变：直接显示上次诊断，不再调 AI、不再车轱辘话
+  const el=document.getElementById('aiStream');const meta=document.getElementById('aiMeta');
+  el.innerHTML=mdToHtml(cached.text);
+  const d=new Date(cached.time);
+  meta.textContent=`数据没变，显示 ${d.getMonth()+1}月${d.getDate()}日 的诊断 · 录入新数据后会自动更新`;
+  document.getElementById('aiChips').innerHTML=diagChips(`<span class="chip" style="opacity:.7" onclick="redoDiagnose()">🔄 重新诊断</span>`);
+  document.getElementById('aiReport').innerHTML=aiReportCards(m);
+}
+function redoDiagnose(){const m=aggregate(periodRecords('month'));if(!m)return;delete S().lastDiag;save();runDiagnose(m);}
 async function runDiagnose(m){
   const el=document.getElementById('aiStream');const meta=document.getElementById('aiMeta');
   // 友好的等待动画，避免看起来卡住（DeepSeek 思考+首屏可能要几秒到几十秒）
@@ -336,12 +348,14 @@ async function runDiagnose(m){
   let got=false,buf='';
   const ok=await streamFromBackend('/api/diagnose',payload,(txt)=>{if(!got){waiting=false;clearInterval(wt);}got=true;buf+=txt;el.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';});
   waiting=false;clearInterval(wt);
-  if(ok&&got){el.innerHTML=mdToHtml(buf);meta.textContent='DeepSeek 实时生成 · 基于近 30 天数据';}
+  if(ok&&got){el.innerHTML=mdToHtml(buf);meta.textContent='DeepSeek 实时生成 · 基于近 30 天数据';
+    S().lastDiag={text:buf,time:Date.now(),sig:diagSig(m)};save(); // 缓存：数据没变就不再重复诊断，顾问对话也能引用
+  }
   else{ // 兜底：内置引擎
     streamLocal(el,diagTokens(m),()=>{document.getElementById('aiReport').innerHTML=aiReportCards(m);});
     meta.textContent='本地模式 · 启动后端可接 DeepSeek';
   }
-  document.getElementById('aiChips').innerHTML=['怎么降成本？','哪道菜该提价？','如何提升客单价？'].map(c=>`<span class="chip" onclick="goto('chat');setTimeout(()=>askPreset(\`${c}\`),250)">💬 ${c}</span>`).join('');
+  document.getElementById('aiChips').innerHTML=diagChips(ok&&got?`<span class="chip" style="opacity:.7" onclick="redoDiagnose()">🔄 重新诊断</span>`:'');
   if(ok&&got)document.getElementById('aiReport').innerHTML=aiReportCards(m);
 }
 // 给 AI 的结构化数据
@@ -386,14 +400,29 @@ PAGES.chat=()=>{setTimeout(initChat,60);
     <div class="chat-input"><input id="chatIn" placeholder="例如：如何提升利润？" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn" onclick="sendChat()">发送</button></div></div>`;
 };
 function pushMsg(t,who){const box=document.getElementById('chatbox');const d=document.createElement('div');d.className='msg '+who;d.innerHTML=t;box.appendChild(d);box.scrollTop=box.scrollHeight;return d;}
-async function aiReplyChat(q){const m=aggregate(periodRecords('month'));const d=pushMsg('<span style="color:var(--mut)">🤔 思考中<span id="cDots">.</span></span>','a');
+/* ---- 对话记忆：保存在本店数据里，切换页面/关闭浏览器都不丢 ---- */
+function chatLog(){const s=S();if(!Array.isArray(s.chat))s.chat=[];return s.chat;}
+function recordChat(role,content,isHtml){const log=chatLog();log.push({r:role,c:content,h:!!isHtml,t:Date.now()});
+  if(log.length>40)log.splice(0,log.length-40);save();}
+function escHtml(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function stripTags(t){return String(t).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();}
+// 发给 AI 的最近对话（去掉 HTML，控制长度）
+function chatHistoryForAI(){return chatLog().slice(-8).map(x=>({role:x.r==='u'?'user':'assistant',content:stripTags(x.h?x.c:x.c).slice(0,600)}));}
+// 最近一次 AI 诊断的摘要（给顾问对话引用，避免两边重复）
+function diagForAI(){const d=S().lastDiag;return d&&d.text?stripTags(d.text).slice(0,700):'';}
+function clearChat(){if(!confirm('清空这家店的全部对话记录？'))return;S().chat=[];save();initChat();}
+async function aiReplyChat(q){const m=aggregate(periodRecords('month'));
+  if(!m){pushMsg('你还没录入数据，先到「录入数据」记几天营业额，我才能结合真实情况回答。','a');return;}
+  const history=chatHistoryForAI();           // 先取历史（不含本条新问题）
+  recordChat('u',q);
+  const d=pushMsg('<span style="color:var(--mut)">🤔 思考中<span id="cDots">.</span></span>','a');
   let dots=0,waiting=true;const wt=setInterval(()=>{if(!waiting)return;dots=(dots+1)%4;const e=document.getElementById('cDots');if(e)e.textContent='.'.repeat(dots+1);},400);
-  const payload={question:q,store:aiPayload(m)};let buf='';let got=false;
+  const payload={question:q,history,last_diagnosis:diagForAI(),store:aiPayload(m)};let buf='';let got=false;
   const ok=await streamFromBackend('/api/chat',payload,(txt)=>{if(!got){waiting=false;clearInterval(wt);}got=true;buf+=txt;d.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';
     d.parentElement.scrollTop=d.parentElement.scrollHeight;});
   waiting=false;clearInterval(wt);
-  if(ok&&got){d.innerHTML=mdToHtml(buf);}
-  else{const ans=aiExpertLocal(q,m);let i=0;(function step(){i+=4;if(i>=ans.length){d.innerHTML=ans;return;}d.innerHTML=ans.slice(0,i).replace(/<[^>]*$/,'')+'<span class="cursor"></span>';setTimeout(step,15);})();}
+  if(ok&&got){d.innerHTML=mdToHtml(buf);recordChat('a',buf);}
+  else{const ans=aiExpertLocal(q,m);recordChat('a',ans,true);let i=0;(function step(){i+=4;if(i>=ans.length){d.innerHTML=ans;return;}d.innerHTML=ans.slice(0,i).replace(/<[^>]*$/,'')+'<span class="cursor"></span>';setTimeout(step,15);})();}
 }
 function aiExpertLocal(q,m){const ct=costTarget(m);const cls=classifyDishes();
   if(/降成本|成本|省钱|降低/.test(q)){if(ct.monthExtra<500)return `成本控制已较好，食材 ${m.foodP}%、人力 ${m.laborP}% 都在健康区间，重心可转向增长。`;
@@ -405,13 +434,19 @@ function aiExpertLocal(q,m){const ct=costTarget(m);const cls=classifyDishes();
   if(/生意|怎么样|总结|本月/.test(q))return `本月营业额 ¥${fmt(m.rev)}，净利润 ¥${fmt(m.profit)}，来客 ${fmt(m.traffic)}，客单价 ¥${m.avg}，毛利率 ${m.gross}%。${m.netP>=m.b.net[0]?'整体健康。':'净利偏低，主要在成本。'}`;
   return `本月营业额 ¥${fmt(m.rev)}，净利润 ¥${fmt(m.profit)}，客单价 ¥${m.avg}。关于"${q}"，可具体问我成本、菜品提价、客单价、利润方面的问题。`;
 }
-function sendChat(){const inp=document.getElementById('chatIn');const q=inp.value.trim();if(!q)return;pushMsg(q,'u');inp.value='';aiReplyChat(q);}
-function askPreset(q){pushMsg(q,'u');aiReplyChat(q);}
+function sendChat(){const inp=document.getElementById('chatIn');const q=inp.value.trim();if(!q)return;pushMsg(escHtml(q),'u');inp.value='';aiReplyChat(q);}
+function askPreset(q){pushMsg(escHtml(q),'u');aiReplyChat(q);}
 function initChat(){const m=aggregate(periodRecords('month'));const box=document.getElementById('chatbox');box.innerHTML='';
   if(!m){pushMsg(`你好，我是你的 AI 餐饮顾问。你还没录入数据，先到「录入数据」记几天的营业额，我就能结合你的真实情况给建议了。`,'a');
     document.getElementById('chatChips').innerHTML='';return;}
-  pushMsg(`你好，我是你的 AI 餐饮顾问。我已了解 <b>${S().name}</b>（${m.t.label}）近 30 天数据，净利率 ${m.netP}%。有什么经营问题，请直接问我。`,'a');
-  document.getElementById('chatChips').innerHTML=['本月经营情况如何？','如何提升利润？','怎么降成本？','哪道菜该提价？'].map(c=>`<span class="chip" onclick="askPreset(\`${c}\`)">${c}</span>`).join('');}
+  const log=chatLog();
+  if(log.length){ // 恢复历史对话（换页面/关浏览器都不丢）
+    log.forEach(x=>pushMsg(x.r==='u'?escHtml(x.c):(x.h?x.c:mdToHtml(x.c)),x.r==='u'?'u':'a'));
+  }else{
+    pushMsg(`你好，我是你的 AI 餐饮顾问。我已了解 <b>${S().name}</b>（${m.t.label}）近 30 天数据，净利率 ${m.netP}%。有什么经营问题，请直接问我。`,'a');
+  }
+  document.getElementById('chatChips').innerHTML=['本月经营情况如何？','如何提升利润？','怎么降成本？','哪道菜该提价？'].map(c=>`<span class="chip" onclick="askPreset(\`${c}\`)">${c}</span>`).join('')
+    +(log.length?`<span class="chip" style="opacity:.7" onclick="clearChat()">🗑 清空对话</span>`:'');}
 
 /* ===== 历史 & 设置 ===== */
 PAGES.history=()=>{const recs=recsSorted().reverse();const t=TY();

@@ -84,10 +84,28 @@ async def diagnose(request: Request):
 # ============ AI 对话接口（流式）============
 @app.post("/api/chat")
 async def chat(request: Request):
-    """前端发来一个问题 + 店铺数据，AI 像顾问一样回答。"""
+    """前端发来：问题 + 最近对话历史 + 最近一次诊断摘要 + 店铺数据。
+    AI 带着记忆回答——不会重复已经说过的建议，也不会把诊断再讲一遍。"""
     body = await request.json()
     question = body.get("question", "")
     store_data = json.dumps(body.get("store", {}), ensure_ascii=False)
+    history = body.get("history", [])           # [{role:'user'|'assistant', content:'...'}]
+    last_diag = str(body.get("last_diagnosis", "") or "")[:800]
+
+    # 组装多轮对话：先给店况（+诊断摘要），再接最近的对话历史，最后是新问题
+    context = f"我店的经营数据：{store_data}"
+    if last_diag:
+        context += f"\n\n【AI 诊断页已经给过的诊断摘要】\n{last_diag}\n（以上内容我已经看过了，对话中不要原样重复；问到相关话题时直接给下一步或新角度。）"
+    messages = [
+        {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
+        {"role": "user", "content": context},
+        {"role": "assistant", "content": "收到，门店情况我已掌握。请讲。"},
+    ]
+    for h in history[-8:]:
+        role, content = h.get("role"), str(h.get("content", ""))[:800]
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": question})
 
     def generate():
         if not API_KEY:
@@ -96,10 +114,7 @@ async def chat(request: Request):
         try:
             stream = get_client().chat.completions.create(
                 model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
-                    {"role": "user", "content": f"我店的经营数据：{store_data}\n\n我的问题：{question}"},
-                ],
+                messages=messages,
                 stream=True,
                 temperature=0.4,  # 低温度让数字判断更稳定一致
                 max_tokens=600,   # 手册已限制 200 字内；这里只是兜底
