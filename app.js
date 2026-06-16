@@ -6,15 +6,15 @@
 
 /* ---------- 业态模型 ---------- */
 const TYPES={
-  快餐:{icon:"🍔",label:"快餐",hasSpeed:true,speedName:"出餐速度",
+  快餐:{icon:"ti-tools-kitchen-2",label:"快餐",hasSpeed:true,speedName:"出餐速度",
     bench:{food:[30,38],labor:[15,22],prime:[50,60],rent:[8,18],net:[10,18],speed:[0,180]},grossTarget:60,seedAvg:32},
-  正餐:{icon:"🍲",label:"正餐",hasSpeed:false,
+  正餐:{icon:"ti-soup",label:"正餐",hasSpeed:false,
     bench:{food:[28,38],labor:[18,25],prime:[55,65],rent:[8,15],net:[8,15]},grossTarget:65,seedAvg:72},
-  精致正餐:{icon:"🥂",label:"高档餐厅",hasSpeed:false,hasExp:true,
+  精致正餐:{icon:"ti-glass-cocktail",label:"高档餐厅",hasSpeed:false,hasExp:true,
     bench:{food:[25,35],labor:[28,38],prime:[58,70],rent:[8,18],net:[6,14],exp:[90,100]},grossTarget:68,seedAvg:320},
-  小吃:{icon:"🥟",label:"小吃",hasSpeed:true,speedName:"出餐速度",
+  小吃:{icon:"ti-bowl-chopsticks",label:"小吃",hasSpeed:true,speedName:"出餐速度",
     bench:{food:[30,40],labor:[12,20],prime:[48,60],rent:[8,18],net:[12,22],speed:[0,120]},grossTarget:62,seedAvg:22},
-  饮品:{icon:"🧋",label:"奶茶/咖啡",hasSpeed:true,speedName:"出杯速度",
+  饮品:{icon:"ti-cup",label:"奶茶/咖啡",hasSpeed:true,speedName:"出杯速度",
     bench:{food:[25,35],labor:[15,25],prime:[45,58],rent:[10,22],net:[12,25],speed:[0,150]},grossTarget:68,seedAvg:18}
 };
 const DBK="zhican_pro_v1";
@@ -121,7 +121,7 @@ async function checkBackend(){
   try{const r=await fetch('/api/diagnose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ping:1})});
     AI_BACKEND=r.ok; }catch(e){AI_BACKEND=false;}
   const el=document.getElementById('aiStatus');
-  if(el)el.innerHTML=AI_BACKEND?'AI：已连接 DeepSeek ✓<br>真实大模型在线':'AI：本地模式<br>(启动后端可接 DeepSeek)';
+  if(el)el.innerHTML=AI_BACKEND?'AI：已连接 DeepSeek <br>真实大模型在线':'AI：本地模式<br>(启动后端可接 DeepSeek)';
 }
 // 调后端流式，回调每段文字；返回是否成功
 async function streamFromBackend(url,payload,onChunk){
@@ -156,9 +156,9 @@ const PAGES={};
 /* ===== 今日利润 ===== */
 function motivLine(){const last=lastRecord();const today=dayProfit(last);const y=findRelative(last.date,1);const yp=y?dayProfit(y):null;
   const m=aggregate(periodRecords('month'));
-  if(yp!=null&&yp>0&&today>yp*1.1)return['🔥',`今日利润比昨日高 ${(((today-yp)/yp)*100).toFixed(0)}%，状态不错，继续保持。`];
-  if(yp!=null&&yp>0&&today<yp*0.9)return['💪',`今日比昨日有所回落，看看是客流还是客单价的问题，明天补回来。`];
-  return['📊',`今日净利润 ¥${fmt(today)}，本月累计 ¥${fmt(m.profit)}。`];}
+  if(yp!=null&&yp>0&&today>yp*1.1)return['<i class="ti ti-flame"></i>',`今日利润比昨日高 ${(((today-yp)/yp)*100).toFixed(0)}%，状态不错，继续保持。`];
+  if(yp!=null&&yp>0&&today<yp*0.9)return['<i class="ti ti-mood-happy"></i>',`今日比昨日有所回落，看看是客流还是客单价的问题，明天补回来。`];
+  return['<i class="ti ti-chart-bar"></i>',`今日净利润 ¥${fmt(today)}，本月累计 ¥${fmt(m.profit)}。`];}
 function cmpBox(label,base){const today=dayProfit(lastRecord());
   if(base==null)return `<div class="cmp"><div class="ck">${label}</div><div class="cv flat">— 无数据</div></div>`;
   const ch=pctChange(today,base);const cls=ch>=0?'up':'down',a=ch>=0?'▲':'▼';
@@ -167,7 +167,7 @@ function cmpBox(label,base){const today=dayProfit(lastRecord());
 /* 没有数据时的友好欢迎页（新用户第一次打开）*/
 function emptyState(title,desc){
   return `<div class="card" style="text-align:center;padding:50px 24px">
-    <div style="font-size:46px;margin-bottom:12px">📝</div>
+    <div style="font-size:46px;margin-bottom:12px"><i class="ti ti-clipboard-text"></i></div>
     <h3 style="justify-content:center;font-size:18px">${title}</h3>
     <div class="sub" style="margin:8px auto 20px;max-width:380px">${desc}</div>
     <button class="btn" onclick="goto('settings')">① 先填门店信息</button>
@@ -177,12 +177,12 @@ function emptyState(title,desc){
 }
 
 PAGES.home=()=>{
-  if(!S().records.length)return emptyState('欢迎使用智餐经营 👋','还没有数据。先到「门店设置」填好你的店，再到「录入数据」记下今天的营业额和来客数，系统就会自动帮你算利润、出报告。');
+  if(!S().records.length)return emptyState('欢迎使用智餐经营 <i class="ti ti-hand-stop"></i>','还没有数据。先到「门店设置」填好你的店，再到「录入数据」记下今天的营业额和来客数，系统就会自动帮你算利润、出报告。');
   const last=lastRecord();const today=dayProfit(last);const m=aggregate(periodRecords('month'));const [mi,mt]=motivLine();
   setTimeout(()=>{renderMoneyFlow(last);renderProfitBars('homeBars');},80);
   return `
   <div class="profit-hero">
-    <div class="ph-lbl">💰 今日净利润</div>
+    <div class="ph-lbl"><i class="ti ti-coin-yuan"></i> 今日净利润</div>
     <div class="ph-big">¥${fmt(today)}</div>
     <div class="ph-sub">${last.date} · 营业额 ¥${fmt(last.rev)} · 来客 ${last.traffic} 人 · 客单价 ¥${(last.rev/last.traffic).toFixed(1)}</div>
     <div class="ph-words">营业额 ¥${fmt(last.rev)}，扣除各项成本后，<b style="color:var(--gr)">净利润 ¥${fmt(today)}</b>。</div>
@@ -192,14 +192,14 @@ PAGES.home=()=>{
       ${cmpBox('对比上月同日',(f=>f?dayProfit(f):null)(findRelative(last.date,30)))}
     </div>
   </div>
-  <div class="card"><h3>💡 利润构成</h3><div class="sub">营业额扣除各项成本，剩下的就是净利润</div><div class="flow" id="moneyFlow"></div></div>
+  <div class="card"><h3><i class="ti ti-bulb"></i> 利润构成</h3><div class="sub">营业额扣除各项成本，剩下的就是净利润</div><div class="flow" id="moneyFlow"></div></div>
   <div class="grid4">
     <div class="kpi"><div class="l">本月累计利润</div><div class="v" style="color:var(--gr)">¥${fmt(m.profit)}</div><div class="bench">${m.days} 天</div></div>
     <div class="kpi"><div class="l">本月营业额</div><div class="v">¥${fmt(m.rev)}</div><div class="bench">净利率 ${m.netP}%</div></div>
     <div class="kpi"><div class="l">毛利率</div><div class="v">${m.gross}%</div><div class="bench">目标 ≥${m.t.grossTarget}%</div></div>
     <div class="kpi"><div class="l">客单价</div><div class="v">¥${m.avg}</div><div class="bench">来客 ${fmt(m.traffic)}</div></div>
   </div>
-  <div class="card"><h3>📈 本月每日利润</h3><div class="sub">绿色为高于平均的日子</div><canvas id="homeBars"></canvas></div>
+  <div class="card"><h3><i class="ti ti-trending-up"></i> 本月每日利润</h3><div class="sub">绿色为高于平均的日子</div><canvas id="homeBars"></canvas></div>
   <div class="card" style="border-left:3px solid var(--gr)"><h3>${mi} AI 提醒</h3><div style="font-size:14.5px;color:#c8d3e4;line-height:1.6">${mt}</div></div>`;
 };
 
@@ -213,7 +213,7 @@ PAGES.entry=()=>{const last=lastRecord();const t=TY();
   if(t.hasSpeed)extra+=`<div class="field"><label>${t.speedName}（秒）</label><input id="e_speed" type="number" placeholder="${t.bench.speed[1]}"></div>`;
   if(t.hasExp)extra+=`<div class="field"><label>客户满意度（0-100，选填）</label><input id="e_exp" type="number" placeholder="92"></div>`;
   return `<div class="grid2">
-    <div class="card"><h3>✍️ 录入今日数据</h3><div class="sub">每天打烊后录入，系统自动累积、自动核算利润。食材和人力成本可留空，系统按近期比例估算。</div>
+    <div class="card"><h3><i class="ti ti-pencil-plus"></i> 录入今日数据</h3><div class="sub">每天打烊后录入，系统自动累积、自动核算利润。食材和人力成本可留空，系统按近期比例估算。</div>
       <div class="field"><label>日期</label><input id="e_date" type="date"></div>
       <div class="grid2">
         <div class="field"><label>营业额（元）</label><input id="e_rev" type="number" placeholder="8600"></div>
@@ -227,7 +227,7 @@ PAGES.entry=()=>{const last=lastRecord();const t=TY();
     <div class="card"><h3>最近 7 天</h3>
       <table><tr><th>日期</th><th>营业额</th><th>来客</th><th>利润</th></tr>
       ${recent.map(r=>`<tr><td>${r.date.slice(5)}</td><td>¥${fmt(r.rev)}</td><td>${r.traffic}</td><td style="color:${dayProfit(r)>=0?'var(--gr)':'var(--rd)'};font-weight:700">¥${fmt(dayProfit(r))}</td></tr>`).join('')}</table>
-      <button class="btn ghost sm" style="margin-top:14px" onclick="if(confirm('清空所有数据，从头开始？此操作不可撤销。')){localStorage.removeItem(DBK);DB=load();render();toast('已清空，可以重新开始了');}">🗑️ 清空所有数据重新开始</button>
+      <button class="btn ghost sm" style="margin-top:14px" onclick="if(confirm('清空所有数据，从头开始？此操作不可撤销。')){localStorage.removeItem(DBK);DB=load();render();toast('已清空，可以重新开始了');}"><i class="ti ti-trash"></i> 清空所有数据重新开始</button>
     </div>
   </div>`;
 };
@@ -259,15 +259,15 @@ function renderReport(){const recs=periodRecords(curPeriod),prev=prevPeriodRecor
     ${kc('日均营业额','¥'+fmt(m.rev/m.days),'',`${m.days} 天`)}
   </div>
   <div class="grid2">
-    <div class="card"><h3>📈 营业额与利润趋势</h3><canvas id="rpTrend"></canvas></div>
-    <div class="card"><h3>🥧 成本结构</h3><div class="sub">主成本 ${m.prime}%（生死线 ≤${m.b.prime[1]}%）</div><canvas id="rpCost"></canvas></div>
+    <div class="card"><h3><i class="ti ti-trending-up"></i> 营业额与利润趋势</h3><canvas id="rpTrend"></canvas></div>
+    <div class="card"><h3><i class="ti ti-chart-donut"></i> 成本结构</h3><div class="sub">主成本 ${m.prime}%（生死线 ≤${m.b.prime[1]}%）</div><canvas id="rpCost"></canvas></div>
   </div>
   ${costTargetCard(m,ct)}`;
 }
 function costTargetCard(m,ct){
-  if(ct.onTrack)return `<div class="card" style="border-left:3px solid var(--gr)"><h3>🎯 成本目标</h3>
+  if(ct.onTrack)return `<div class="card" style="border-left:3px solid var(--gr)"><h3><i class="ti ti-target"></i> 成本目标</h3>
     <div style="font-size:15px;line-height:1.7;color:#c8d3e4">成本控制良好：食材成本率 ${m.foodP}%、人力成本率 ${m.laborP}%，均在健康区间，净利率 ${m.netP}%。接下来把重心放在提升营业额和客单价上。</div></div>`;
-  return `<div class="card" style="border-left:3px solid var(--yl)"><h3>🎯 成本目标：达标后每月多赚 ¥${fmt(ct.monthExtra)}</h3>
+  return `<div class="card" style="border-left:3px solid var(--yl)"><h3><i class="ti ti-target"></i> 成本目标：达标后每月多赚 ¥${fmt(ct.monthExtra)}</h3>
     <div class="sub">成本偏高，正在侵蚀利润。下面是建议的成本目标。</div>
     <table><tr><th>成本项</th><th>当前</th><th>目标</th><th>每月可省</th></tr>
       ${ct.foodGap>0.3?`<tr><td>食材成本</td><td>${m.foodP}%（¥${fmt(ct.curFoodMoney)}）</td><td style="color:var(--gr)">${ct.targetFoodP}%（¥${fmt(ct.targetFoodMoney)}）</td><td><b style="color:var(--gr)">¥${fmt(ct.curFoodMoney-ct.targetFoodMoney)}</b></td></tr>`:''}
@@ -290,14 +290,14 @@ function reportRow(name,raw,range,higherBetter,unit){
 
 /* ===== 菜品利润 ===== */
 PAGES.dishes=()=>{setTimeout(()=>{renderDishesPage();renderDishQuad('dishQuad');},60);
-  return `<div class="card"><h3>🍽️ 菜品利润分析</h3>
+  return `<div class="card"><h3><i class="ti ti-tools-kitchen"></i> 菜品利润分析</h3>
     <div class="sub">编辑每道菜的售价和成本，实时显示毛利率与利润贡献。卖得好但毛利低的可适当提价，毛利低又滞销的可考虑下架。</div>
     <div id="dishWrap"></div>
     <button class="btn sm" style="margin-top:12px" onclick="addDish()">+ 添加菜品</button>
-    <button class="btn ghost sm" style="margin-top:12px;margin-left:8px" onclick="saveDishes()">💾 保存</button></div>
+    <button class="btn ghost sm" style="margin-top:12px;margin-left:8px" onclick="saveDishes()"><i class="ti ti-device-floppy"></i> 保存</button></div>
   <div class="grid2">
-    <div class="card"><h3>📊 菜品矩阵</h3><div class="sub">毛利率 × 销量。右上为优质菜品，左下需处理</div><canvas id="dishQuad"></canvas></div>
-    <div class="card"><h3>💡 调整建议</h3><div id="dishAdvice"></div></div></div>`;
+    <div class="card"><h3><i class="ti ti-chart-bar"></i> 菜品矩阵</h3><div class="sub">毛利率 × 销量。右上为优质菜品，左下需处理</div><canvas id="dishQuad"></canvas></div>
+    <div class="card"><h3><i class="ti ti-bulb"></i> 调整建议</h3><div id="dishAdvice"></div></div></div>`;
 };
 function renderDishesPage(){const dm=dishMetrics();const cls=classifyDishes();const rm={};cls.forEach(c=>rm[c.name]=c);
   document.getElementById('dishWrap').innerHTML=`
@@ -312,7 +312,7 @@ function renderDishesPage(){const dm=dishMetrics();const cls=classifyDishes();co
       <td><button class="btn ghost sm" onclick="delDish(${i})">删</button></td></tr>`;}).join('')}
     <tr style="border-top:2px solid var(--bd2)"><td><b>合计</b></td><td></td><td></td><td><b style="color:var(--br2)">${menuGrossMargin()}%</b></td>
       <td><b>${fmt(dm.reduce((a,d)=>a+d.qty,0))}</b></td><td><b style="color:var(--gr)">¥${fmt(dm.reduce((a,d)=>a+d.monthProfit,0))}</b></td><td></td><td></td></tr></table>
-    <div class="note">整店加权毛利率 ${menuGrossMargin()}%（目标 ≥${TY().grossTarget}%）。修改价格可实时看合计利润变化。<br>💡 "类型"是相对比较：明星/走量/潜力/滞销 是把每道菜和全店平均水平对比得出的，所以改一道菜，其他菜的类型可能跟着微调，这是正常的——它帮你看清"谁比谁更值得主推或下架"。</div>`;
+    <div class="note">整店加权毛利率 ${menuGrossMargin()}%（目标 ≥${TY().grossTarget}%）。修改价格可实时看合计利润变化。<br><i class="ti ti-bulb"></i> "类型"是相对比较：明星/走量/潜力/滞销 是把每道菜和全店平均水平对比得出的，所以改一道菜，其他菜的类型可能跟着微调，这是正常的——它帮你看清"谁比谁更值得主推或下架"。</div>`;
   const adv={明星菜:'高毛利高销量，放菜单首位重点推荐，是利润支柱',走量菜:'销量高但毛利低，可小幅提价或降本，因销量大效果放大',潜力菜:'毛利高但销量低，加强推荐、改名换图把它卖动',滞销菜:'毛利低又滞销，考虑下架或重新设计，节省备料与库存'};
   const g={};cls.forEach(c=>{(g[c.cat]=g[c.cat]||[]).push(c.name);});
   document.getElementById('dishAdvice').innerHTML=Object.entries(g).map(([cat,ns])=>{const tag={明星菜:'jun',走量菜:'chen',潜力菜:'zuo',滞销菜:'shi'}[cat];
@@ -325,16 +325,16 @@ PAGES.ai=()=>{const m=aggregate(periodRecords('month'));
   if(!m)return emptyState('还没有数据','录入几天的经营数据后，AI 才能帮你诊断。先去「录入数据」。');
   const cached=S().lastDiag&&S().lastDiag.sig===diagSig(m)?S().lastDiag:null;
   setTimeout(()=>{cached?showCachedDiag(m,cached):runDiagnose(m);},100);
-  return `<div class="aihero"><div class="ai-head"><div class="ai-av">🤖</div><div><div class="ai-nm">AI 餐饮顾问 · 经营诊断</div><div class="ai-mt" id="aiMeta">分析中…</div></div></div>
+  return `<div class="aihero"><div class="ai-head"><div class="ai-av"><i class="ti ti-robot"></i></div><div><div class="ai-nm">AI 餐饮顾问 · 经营诊断</div><div class="ai-mt" id="aiMeta">分析中…</div></div></div>
     <div class="ai-stream" id="aiStream"></div><div class="chips" id="aiChips"></div></div><div id="aiReport"></div>`;
 };
-function diagChips(extra){return ['怎么降成本？','哪道菜该提价？','如何提升客单价？'].map(c=>`<span class="chip" onclick="goto('chat');setTimeout(()=>askPreset(\`${c}\`),250)">💬 ${c}</span>`).join('')+(extra||'');}
+function diagChips(extra){return ['怎么降成本？','哪道菜该提价？','如何提升客单价？'].map(c=>`<span class="chip" onclick="goto('chat');setTimeout(()=>askPreset(\`${c}\`),250)"><i class="ti ti-message-circle"></i> ${c}</span>`).join('')+(extra||'');}
 function showCachedDiag(m,cached){ // 数据没变：直接显示上次诊断，不再调 AI、不再车轱辘话
   const el=document.getElementById('aiStream');const meta=document.getElementById('aiMeta');
   el.innerHTML=mdToHtml(cached.text);
   const d=new Date(cached.time);
   meta.textContent=`数据没变，显示 ${d.getMonth()+1}月${d.getDate()}日 的诊断 · 录入新数据后会自动更新`;
-  document.getElementById('aiChips').innerHTML=diagChips(`<span class="chip" style="opacity:.7" onclick="redoDiagnose()">🔄 重新诊断</span>`);
+  document.getElementById('aiChips').innerHTML=diagChips(`<span class="chip" style="opacity:.7" onclick="redoDiagnose()"><i class="ti ti-refresh"></i> 重新诊断</span>`);
   document.getElementById('aiReport').innerHTML=aiReportCards(m);
 }
 function redoDiagnose(){const m=aggregate(periodRecords('month'));if(!m)return;delete S().lastDiag;save();runDiagnose(m);}
@@ -342,7 +342,7 @@ async function runDiagnose(m){
   const el=document.getElementById('aiStream');const meta=document.getElementById('aiMeta');
   // 友好的等待动画，避免看起来卡住（DeepSeek 思考+首屏可能要几秒到几十秒）
   let dots=0,waiting=true;
-  el.innerHTML='<span style="color:var(--mut)">🤔 AI 正在分析你的经营数据<span id="aiDots">.</span></span>';
+  el.innerHTML='<span style="color:var(--mut)"><i class="ti ti-loader-2"></i> AI 正在分析你的经营数据<span id="aiDots">.</span></span>';
   const wt=setInterval(()=>{if(!waiting)return;dots=(dots+1)%4;const e=document.getElementById('aiDots');if(e)e.textContent='.'.repeat(dots+1);},400);
   const payload=aiPayload(m);
   let got=false,buf='';
@@ -355,7 +355,7 @@ async function runDiagnose(m){
     streamLocal(el,diagTokens(m),()=>{document.getElementById('aiReport').innerHTML=aiReportCards(m);});
     meta.textContent='本地模式 · 启动后端可接 DeepSeek';
   }
-  document.getElementById('aiChips').innerHTML=diagChips(ok&&got?`<span class="chip" style="opacity:.7" onclick="redoDiagnose()">🔄 重新诊断</span>`:'');
+  document.getElementById('aiChips').innerHTML=diagChips(ok&&got?`<span class="chip" style="opacity:.7" onclick="redoDiagnose()"><i class="ti ti-refresh"></i> 重新诊断</span>`:'');
   if(ok&&got)document.getElementById('aiReport').innerHTML=aiReportCards(m);
 }
 // 给 AI 的结构化数据
@@ -382,20 +382,20 @@ function diagTokens(m){const t=[];const push=(s,tag)=>t.push({s,tag});const ct=c
   else push('成本控制良好，重心应放在提升营业额和客单价上。','hl');
   return t;}
 function aiReportCards(m){const out=[];const ct=costTarget(m);const cls=classifyDishes();
-  if(ct.monthExtra>500)out.push(['yl','💰','成本偏高，正在侵蚀利润',
+  if(ct.monthExtra>500)out.push(['yl','<i class="ti ti-coin-yuan"></i>','成本偏高，正在侵蚀利润',
     `食材成本率 ${m.foodP}%、人力成本率 ${m.laborP}%，主成本 ${m.prime}%，超过生死线 ${m.b.prime[1]}%。`,
     `降到健康水平，<b>每月可多赚 ¥${fmt(ct.monthExtra)}</b>。降本方向：食材货比三家/集中采购、按客流排班、控制损耗。`]);
-  else out.push(['gr','✅','成本结构健康',`净利率 ${m.netP}%、主成本 ${m.prime}%。`,`重心转向增长：提升营业额、客单价与复购。`]);
+  else out.push(['gr','<i class="ti ti-circle-check"></i>','成本结构健康',`净利率 ${m.netP}%、主成本 ${m.prime}%。`,`重心转向增长：提升营业额、客单价与复购。`]);
   const dogs=cls.filter(d=>d.cat==='滞销菜');
-  if(dogs.length)out.push(['yl','🍽️','部分菜品滞销',`${dogs.slice(0,3).map(d=>d.name).join('、')} 毛利低且销量低。`,`考虑下架或重新设计，详见「菜品利润」。`]);
-  if(m.t.hasSpeed&&m.speed>m.b.speed[1])out.push(['yl','⏱️',m.t.speedName+'偏慢',`平均 ${m.speed} 秒，超过 ${m.b.speed[1]} 秒目标。`,`优化后厨动线、提前备料、高峰增援。`]);
+  if(dogs.length)out.push(['yl','<i class="ti ti-tools-kitchen"></i>','部分菜品滞销',`${dogs.slice(0,3).map(d=>d.name).join('、')} 毛利低且销量低。`,`考虑下架或重新设计，详见「菜品利润」。`]);
+  if(m.t.hasSpeed&&m.speed>m.b.speed[1])out.push(['yl','<i class="ti ti-clock"></i>',m.t.speedName+'偏慢',`平均 ${m.speed} 秒，超过 ${m.b.speed[1]} 秒目标。`,`优化后厨动线、提前备料、高峰增援。`]);
   return out.map(o=>`<div class="card" style="border-left:3px solid var(--${o[0]==='yl'?'yl':o[0]==='rd'?'rd':'gr'})">
     <h3>${o[1]} ${o[2]}</h3><div class="muted" style="line-height:1.65;margin:6px 0">${o[3]}</div>
     <div style="background:var(--panel2);padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.65"><b style="color:var(--br2)">建议 ｜ </b>${o[4]}</div></div>`).join('');}
 
 /* ===== AI 顾问对话（真实后端 + 兜底）===== */
 PAGES.chat=()=>{setTimeout(initChat,60);
-  return `<div class="card"><h3>💬 AI 餐饮顾问</h3><div class="sub">结合你这家${TY().label}的真实数据回答，直接给出可执行建议。</div>
+  return `<div class="card"><h3><i class="ti ti-message-circle"></i> AI 餐饮顾问</h3><div class="sub">结合你这家${TY().label}的真实数据回答，直接给出可执行建议。</div>
     <div class="chatbox" id="chatbox"></div><div class="chips" id="chatChips"></div>
     <div class="chat-input"><input id="chatIn" placeholder="例如：如何提升利润？" onkeydown="if(event.key==='Enter')sendChat()"><button class="btn" onclick="sendChat()">发送</button></div></div>`;
 };
@@ -415,7 +415,7 @@ async function aiReplyChat(q){const m=aggregate(periodRecords('month'));
   if(!m){pushMsg('你还没录入数据，先到「录入数据」记几天营业额，我才能结合真实情况回答。','a');return;}
   const history=chatHistoryForAI();           // 先取历史（不含本条新问题）
   recordChat('u',q);
-  const d=pushMsg('<span style="color:var(--mut)">🤔 思考中<span id="cDots">.</span></span>','a');
+  const d=pushMsg('<span style="color:var(--mut)"><i class="ti ti-loader-2"></i> 思考中<span id="cDots">.</span></span>','a');
   let dots=0,waiting=true;const wt=setInterval(()=>{if(!waiting)return;dots=(dots+1)%4;const e=document.getElementById('cDots');if(e)e.textContent='.'.repeat(dots+1);},400);
   const payload={question:q,history,last_diagnosis:diagForAI(),store:aiPayload(m)};let buf='';let got=false;
   const ok=await streamFromBackend('/api/chat',payload,(txt)=>{if(!got){waiting=false;clearInterval(wt);}got=true;buf+=txt;d.innerHTML=mdToHtml(buf)+'<span class="cursor"></span>';
@@ -446,16 +446,16 @@ function initChat(){const m=aggregate(periodRecords('month'));const box=document
     pushMsg(`你好，我是你的 AI 餐饮顾问。我已了解 <b>${S().name}</b>（${m.t.label}）近 30 天数据，净利率 ${m.netP}%。有什么经营问题，请直接问我。`,'a');
   }
   document.getElementById('chatChips').innerHTML=['本月经营情况如何？','如何提升利润？','怎么降成本？','哪道菜该提价？'].map(c=>`<span class="chip" onclick="askPreset(\`${c}\`)">${c}</span>`).join('')
-    +(log.length?`<span class="chip" style="opacity:.7" onclick="clearChat()">🗑 清空对话</span>`:'');}
+    +(log.length?`<span class="chip" style="opacity:.7" onclick="clearChat()"><i class="ti ti-trash"></i> 清空对话</span>`:'');}
 
 /* ===== 历史 & 设置 ===== */
 PAGES.history=()=>{const recs=recsSorted().reverse();const t=TY();
-  return `<div class="card"><h3>🗂️ 历史数据（${recs.length} 天）</h3><div class="sub">数据持久保存在本地。</div>
+  return `<div class="card"><h3><i class="ti ti-database"></i> 历史数据（${recs.length} 天）</h3><div class="sub">数据持久保存在本地。</div>
     <table><tr><th>日期</th><th>营业额</th><th>来客</th><th>客单价</th><th>食材</th><th>人力</th><th>利润</th><th></th></tr>
     ${recs.slice(0,60).map(r=>`<tr><td>${r.date}</td><td>¥${fmt(r.rev)}</td><td>${r.traffic}</td><td>¥${(r.rev/r.traffic).toFixed(0)}</td><td>¥${fmt(r.food)}</td><td>¥${fmt(r.labor)}</td><td style="color:${dayProfit(r)>=0?'var(--gr)':'var(--rd)'};font-weight:700">¥${fmt(dayProfit(r))}</td><td><button class="btn ghost sm" onclick="delRec('${r.date}')">删</button></td></tr>`).join('')}</table></div>`;
 };
 PAGES.settings=()=>{const s=S();
-  return `<div class="card" style="max-width:560px"><h3>⚙️ 门店设置</h3><div class="sub">业态决定使用哪套评估标准。</div>
+  return `<div class="card" style="max-width:560px"><h3><i class="ti ti-settings"></i> 门店设置</h3><div class="sub">业态决定使用哪套评估标准。</div>
     <div class="field"><label>门店名称</label><input id="s_name" value="${s.name}"></div>
     <div class="field"><label>业态</label><select id="s_type">${Object.keys(TYPES).map(k=>`<option value="${k}" ${s.type===k?'selected':''}>${TYPES[k].label}</option>`).join('')}</select></div>
     <div class="grid2"><div class="field"><label>营业面积（㎡）</label><input id="s_area" type="number" value="${s.area}"></div>
@@ -491,37 +491,38 @@ function saveStore(){const s=S();s.name=document.getElementById('s_name').value;
   if(!S().records.length){setTimeout(()=>goto('entry'),600);}else{render();}}
 function switchType(){const s=S();const ns=newStore(s.type);ns.name=s.name;ns.area=s.area;ns.seats=s.seats;ns.rent=s.rent;
   DB.stores[DB.activeStore]=ns;save();updateTypeTag();toast('已按 '+TYPES[s.type].label+' 重置');render();}
-function updateTypeTag(){const t=TY();const el=document.getElementById('typeTag');if(el)el.innerHTML=`<span class="logo">${t.icon}</span><span>${t.label}</span>`;}
+function updateTypeTag(){const t=TY();const el=document.getElementById('typeTag');if(el)el.innerHTML=`<i class="ti ${t.icon}"></i><span>${t.label}</span>`;}
 
 /* ===== 利润构成可视化 ===== */
 function renderMoneyFlow(r){const el=document.getElementById('moneyFlow');if(!el)return;const s=S();
   const food=r.food,labor=r.labor,rent=Math.round(s.rent/30),other=Math.round(r.rev*s.fixedOther),profit=dayProfit(r),max=r.rev;
   const W=p=>Math.max(8,Math.round(p/max*100));
-  const row=(color,label,money,tip)=>`<div class="flowrow"><div class="bar" style="width:${W(money)}%;background:${color}">¥${fmt(money)}</div><div class="tip">${label} ${tip}</div></div>`;
+  // bg=条颜色, tc=条上文字颜色（深色保证可读）
+  const row=(bg,tc,label,money,tip)=>`<div class="flowrow"><div class="bar" style="width:${W(money)}%;background:${bg};color:${tc}">¥${fmt(money)}</div><div class="tip">${label} ${tip}</div></div>`;
   el.innerHTML=
-    row('linear-gradient(90deg,#fff,#cfe3ff)','营业额',r.rev,'')+
-    row('var(--food)','食材成本',food,'')+
-    row('var(--labor)','人力成本',labor,'')+
-    row('var(--rent)','房租',rent,'(摊到今日)')+
-    row('var(--other)','水电杂费',other,'')+
-    `<div class="flow-final"><span class="fb">🎉</span><span class="ft">净利润</span><span class="fv">¥${fmt(profit)}</span></div>`;
+    row('#eef1f5','#1f2329','营业额',r.rev,'(总收入)')+
+    row('#fcebed','#d93b4b','食材成本',food,'')+
+    row('#fdf3e0','#c98a12','人力成本',labor,'')+
+    row('#ecf2fd','#2f6fdb','房租',rent,'(摊到今日)')+
+    row('#f1f3f5','#5f6571','水电杂费',other,'')+
+    `<div class="flow-final"><span class="ft">净利润</span><span class="fv">¥${fmt(profit)}</span></div>`;
 }
 /* ===== 图表 ===== */
-const AX={x:{ticks:{color:'#5a6a85',maxTicksLimit:10},grid:{color:'#15203360'}},y:{ticks:{color:'#5a6a85'},grid:{color:'#15203360'}}};
+const AX={x:{ticks:{color:'#9aa0ac',maxTicksLimit:10},grid:{color:'#eef0f3'}},y:{ticks:{color:'#9aa0ac'},grid:{color:'#eef0f3'}}};
 function renderProfitBars(id){const el=document.getElementById(id);if(!el)return;const r=recsSorted().slice(-30);
   const goal=r.reduce((a,x)=>a+dayProfit(x),0)/r.length;
-  charts[id]=new Chart(el,{type:'bar',data:{labels:r.map(x=>x.date.slice(5)),datasets:[{data:r.map(dayProfit),backgroundColor:r.map(x=>dayProfit(x)>=goal?'#34e0a1':'#ff7a3d'),borderRadius:5}]},options:{plugins:{legend:{display:false}},scales:AX}});}
+  charts[id]=new Chart(el,{type:'bar',data:{labels:r.map(x=>x.date.slice(5)),datasets:[{data:r.map(dayProfit),backgroundColor:r.map(x=>dayProfit(x)>=goal?'#1a9e6f':'#e8632a'),borderRadius:5}]},options:{plugins:{legend:{display:false}},scales:AX}});}
 function renderReportTrend(id,recs){const el=document.getElementById(id);if(!el)return;
   charts[id]=new Chart(el,{type:'line',data:{labels:recs.map(r=>r.date.slice(5)),datasets:[
-    {label:'营业额',data:recs.map(r=>r.rev),borderColor:'#ff7a3d',backgroundColor:'rgba(255,122,61,.08)',fill:true,tension:.34,pointRadius:0},
-    {label:'利润',data:recs.map(dayProfit),borderColor:'#34e0a1',tension:.34,pointRadius:0}]},options:{plugins:{legend:{labels:{color:'#9fb0cc'}}},scales:AX}});}
+    {label:'营业额',data:recs.map(r=>r.rev),borderColor:'#e8632a',backgroundColor:'rgba(232,99,42,.07)',fill:true,tension:.34,pointRadius:0},
+    {label:'利润',data:recs.map(dayProfit),borderColor:'#1a9e6f',tension:.34,pointRadius:0}]},options:{plugins:{legend:{labels:{color:'#5f6571'}}},scales:AX}});}
 function renderCostDonut(id,m){const el=document.getElementById(id);if(!el)return;const other=Math.max(0,100-m.foodP-m.laborP-m.rentP-m.netP);
-  charts[id]=new Chart(el,{type:'doughnut',data:{labels:['食材','人力','房租','水电杂费','净利润'],datasets:[{data:[m.foodP,m.laborP,m.rentP,+other.toFixed(1),m.netP],backgroundColor:['#ff6b7a','#ffce4a','#5eb3ff','#8595b0','#34e0a1'],borderWidth:0}]},options:{plugins:{legend:{position:'bottom',labels:{color:'#aebbd2',font:{size:12},padding:13}}}}});}
+  charts[id]=new Chart(el,{type:'doughnut',data:{labels:['食材','人力','房租','水电杂费','净利润'],datasets:[{data:[m.foodP,m.laborP,m.rentP,+other.toFixed(1),m.netP],backgroundColor:['#d93b4b','#c98a12','#2f6fdb','#9aa0ac','#1a9e6f'],borderWidth:2,borderColor:'#ffffff'}]},options:{plugins:{legend:{position:'bottom',labels:{color:'#5f6571',font:{size:12},padding:13}}}}});}
 function renderDishQuad(id){const el=document.getElementById(id);if(!el)return;const cls=classifyDishes();
-  const col={明星菜:'#ffd166',走量菜:'#34e0a1',潜力菜:'#ffce4a',滞销菜:'#ff6b7a'};
+  const col={明星菜:'#e8632a',走量菜:'#1a9e6f',潜力菜:'#c98a12',滞销菜:'#d93b4b'};
   charts[id]=new Chart(el,{type:'bubble',data:{datasets:cls.map(d=>({label:d.name,data:[{x:d.qty,y:d.margin,r:Math.max(7,Math.sqrt(d.qty)/3)}],backgroundColor:col[d.cat]+'cc'}))},
     options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>{const d=cls[c.datasetIndex];return `${d.name}: 毛利${d.margin}%, 月销${d.qty}`;}}}},
-    scales:{x:{title:{display:true,text:'销量 →',color:'#8595b0'},ticks:{color:'#5a6a85'},grid:{color:'#15203360'}},y:{title:{display:true,text:'毛利率 ↑',color:'#8595b0'},ticks:{color:'#5a6a85'},grid:{color:'#15203360'}}}}});}
+    scales:{x:{title:{display:true,text:'销量 →',color:'#9aa0ac'},ticks:{color:'#9aa0ac'},grid:{color:'#eef0f3'}},y:{title:{display:true,text:'毛利率 ↑',color:'#9aa0ac'},ticks:{color:'#9aa0ac'},grid:{color:'#eef0f3'}}}}});}
 
 /* ===== 本地流式打字（兜底用）===== */
 let typer=null;
