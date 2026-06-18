@@ -5,17 +5,22 @@
   --bd:#e8eaed;           /* 边框浅灰 */
   --bd2:#dadce0;          /* 强调边框 */
   --tx:#1f2329;           /* 主文字 深 */
-  --tx2:#5f6571;          /* 次文字 */
-  --tx3:#9aa0ac;          /* 提示文字 */
+  --tx2:#4b515c;          /* 次文字 (加深,白底清晰) */
+  --tx3:#6b7280;          /* 提示文字 (加深,确保可读) */
   --brand:#e8632a;        /* 品牌橙(克制使用) */
   --brand-soft:#fff1ea;   /* 橙浅底 */
   --brand-tx:#b8481c;     /* 橙文字 */
-  --gr:#1a9e6f;--gr-soft:#e7f6ef;
-  --rd:#d93b4b;--rd-soft:#fcebed;
-  --yl:#c98a12;--yl-soft:#fdf3e0;
-  --bl:#2f6fdb;--bl-soft:#ecf2fd;
+  --gr:#118a5e;--gr-soft:#e7f6ef;     /* 绿 加深 */
+  --rd:#cc2f3f;--rd-soft:#fcebed;     /* 红 加深 */
+  --yl:#a8740c;--yl-soft:#fdf3e0;     /* 黄/橙褐 加深(白底可读) */
+  --bl:#2563c9;--bl-soft:#ecf2fd;     /* 蓝 加深 */
   --shadow:0 1px 2px rgba(20,28,45,.04),0 1px 3px rgba(20,28,45,.06);
   --r:10px;--r-lg:14px;
+  /* 兼容旧变量名,统一映射到亮色主题的清晰颜色 */
+  --mut:#4b515c;          /* 旧"灰字"→改成可读的深次文字 */
+  --dim:#6b7280;
+  --br2:#b8481c;          /* 旧橙强调→品牌橙文字色 */
+  --panel2:#fbfbfc;       /* 旧次级面板→浅白 */
 }
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;}
 body{background:var(--bg);color:var(--tx);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;}

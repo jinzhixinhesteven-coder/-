@@ -390,8 +390,8 @@ function aiReportCards(m){const out=[];const ct=costTarget(m);const cls=classify
   if(dogs.length)out.push(['yl','<i class="ti ti-tools-kitchen"></i>','部分菜品滞销',`${dogs.slice(0,3).map(d=>d.name).join('、')} 毛利低且销量低。`,`考虑下架或重新设计，详见「菜品利润」。`]);
   if(m.t.hasSpeed&&m.speed>m.b.speed[1])out.push(['yl','<i class="ti ti-clock"></i>',m.t.speedName+'偏慢',`平均 ${m.speed} 秒，超过 ${m.b.speed[1]} 秒目标。`,`优化后厨动线、提前备料、高峰增援。`]);
   return out.map(o=>`<div class="card" style="border-left:3px solid var(--${o[0]==='yl'?'yl':o[0]==='rd'?'rd':'gr'})">
-    <h3>${o[1]} ${o[2]}</h3><div class="muted" style="line-height:1.65;margin:6px 0">${o[3]}</div>
-    <div style="background:var(--panel2);padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.65"><b style="color:var(--br2)">建议 ｜ </b>${o[4]}</div></div>`).join('');}
+    <h3>${o[1]} ${o[2]}</h3><div style="color:var(--tx2);line-height:1.65;margin:6px 0">${o[3]}</div>
+    <div style="background:var(--surface2);border:1px solid var(--bd);padding:12px 14px;border-radius:10px;font-size:14px;line-height:1.65;color:var(--tx)"><b style="color:var(--brand-tx)">建议 ｜ </b>${o[4]}</div></div>`).join('');}
 
 /* ===== AI 顾问对话（真实后端 + 兜底）===== */
 PAGES.chat=()=>{setTimeout(initChat,60);
