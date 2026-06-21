@@ -12,7 +12,7 @@
 import os
 import json
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 
@@ -25,6 +25,9 @@ except ImportError:
     from backend import db
 
 db.init_db()   # 启动时建表（已存在则跳过）
+
+# 开发者后台密钥：设了环境变量 ADMIN_KEY 就用它，否则用默认（建议线上一定设一个）
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "zhican-admin-2026")
 
 # ============ 读取你的 DeepSeek API Key ============
 # 优先从环境变量读取（更安全）；没有就读 config.json
@@ -193,6 +196,63 @@ async def api_load(request: Request):
     b = await request.json()
     ok, msg, data = db.load_data(b.get("token", ""))
     return {"ok": ok, "msg": msg, "data": data}
+
+
+# ============ 开发者后台（用密钥访问，看所有存储的数据）============
+@app.get("/api/admin/data")
+async def admin_data(key: str = ""):
+    if key != ADMIN_KEY:
+        return {"ok": False, "error": "密钥不对"}
+    return {"ok": True, "stats": db.admin_stats(), "users": db.admin_list_all()}
+
+
+@app.get("/admin")
+async def admin_page():
+    """一个简单的开发者后台页面：输入密钥后查看所有用户和数据。"""
+    html = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0"><title>智餐经营 · 开发者后台</title>
+<style>
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:980px;margin:24px auto;padding:0 18px;color:#1f2329;background:#f6f7f9}
+h1{font-size:22px}.bar{display:flex;gap:8px;margin:16px 0}
+input{padding:10px 12px;border:1px solid #dadce0;border-radius:8px;font-size:14px;flex:1}
+button{padding:10px 18px;border:none;border-radius:8px;background:#e8632a;color:#fff;font-weight:600;cursor:pointer}
+.stat{background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:14px;margin-bottom:14px;font-size:14px}
+.user{background:#fff;border:1px solid #e8eaed;border-radius:10px;padding:16px;margin-bottom:12px}
+.user h3{margin:0 0 8px;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{padding:7px 8px;text-align:left;border-bottom:1px solid #eef0f3}th{color:#5f6571}
+pre{background:#f1f3f5;border-radius:8px;padding:12px;font-size:12px;overflow:auto;max-height:300px}
+details{margin-top:8px}summary{cursor:pointer;color:#b8481c;font-size:13px}
+.muted{color:#6b7280;font-size:13px}
+</style></head><body>
+<h1>智餐经营 · 开发者后台</h1>
+<div class="muted">输入开发者密钥，查看所有注册用户和他们上传的数据，确认数据已真实存储。</div>
+<div class="bar"><input id="key" type="password" placeholder="开发者密钥"><button onclick="load()">查看数据</button></div>
+<div id="out"></div>
+<script>
+async function load(){
+  const key=document.getElementById('key').value;
+  const out=document.getElementById('out');out.innerHTML='加载中…';
+  try{
+    const r=await fetch('/api/admin/data?key='+encodeURIComponent(key));
+    const j=await r.json();
+    if(!j.ok){out.innerHTML='<div class="stat" style="color:#cc2f3f">'+(j.error||'失败')+'</div>';return;}
+    let h='<div class="stat"><b>总用户数：'+j.stats.user_count+'</b> · 数据库文件：<code>'+j.stats.db_path+'</code></div>';
+    if(!j.users.length)h+='<div class="stat">还没有任何注册用户。</div>';
+    j.users.forEach(u=>{
+      h+='<div class="user"><h3>#'+u.id+' '+u.username+' <span class="muted">· '+u.store_count+' 家店</span></h3>';
+      if(u.stores.length){
+        h+='<table><tr><th>门店</th><th>业态</th><th>记录天数</th><th>首条</th><th>最近</th><th>菜品数</th></tr>';
+        u.stores.forEach(s=>{h+='<tr><td>'+s.name+'</td><td>'+s.type+'</td><td>'+s.record_days+'</td><td>'+(s.first_date||'-')+'</td><td>'+(s.last_date||'-')+'</td><td>'+s.dishes+'</td></tr>';});
+        h+='</table>';
+      }else{h+='<div class="muted">该用户还没有录入数据。</div>';}
+      h+='<details><summary>查看完整原始数据 (JSON)</summary><pre>'+JSON.stringify(u.raw_data,null,2)+'</pre></details></div>';
+    });
+    out.innerHTML=h;
+  }catch(e){out.innerHTML='<div class="stat" style="color:#cc2f3f">出错：'+e.message+'</div>';}
+}
+</script></body></html>"""
+    return HTMLResponse(html)
 
 
 # ============ 托管前端网页 ============

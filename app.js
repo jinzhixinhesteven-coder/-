@@ -740,12 +740,19 @@ async function doAuth(){
     // 成功
     AUTH.token=j.token;AUTH.username=j.username;
     localStorage.setItem('zhican_token',j.token);localStorage.setItem('zhican_user',j.username);
-    // 登录：从云端拉数据；注册：把当前本地数据推上云
     if(loginMode==='login'){
+      // 登录：用这个账号的云端数据，完全替换掉本地（防止串到上一个账号的数据）
       const lr=await fetch('/api/load',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:j.token})});
       const lj=await lr.json();
-      if(lj.ok&&lj.data&&lj.data.stores){DB=lj.data;localStorage.setItem(DBK,JSON.stringify(DB));}
+      if(lj.ok&&lj.data&&lj.data.stores&&lj.data.stores.length){
+        DB=lj.data;                       // 云端有数据 → 用云端的
+      }else{
+        DB=seed();                        // 云端没数据(新账号) → 全新空白，不沿用上个账号
+      }
+      localStorage.setItem(DBK,JSON.stringify(DB));
     }else{
+      // 注册：全新账号 → 从空白开始，并立刻把空白推上云占位
+      DB=seed();localStorage.setItem(DBK,JSON.stringify(DB));
       await syncToCloud();
     }
     hideLogin();updateAuthUI();updateTypeTag();goto('home');
@@ -753,7 +760,15 @@ async function doAuth(){
   }catch(e){err.textContent='连不上服务器，检查网络';}
 }
 function skipLogin(){hideLogin();toast('本地试用模式，建议尽快注册以保存数据');}
-function logout(){AUTH={token:'',username:''};localStorage.removeItem('zhican_token');localStorage.removeItem('zhican_user');updateAuthUI();showLogin();renderLogin();}
+function logout(){
+  // 退出：清掉登录态 + 本地数据缓存，避免下一个账号看到上一个的数据
+  AUTH={token:'',username:''};
+  localStorage.removeItem('zhican_token');localStorage.removeItem('zhican_user');
+  localStorage.removeItem(DBK);
+  DB=seed();                              // 重置成全新空白
+  updateAuthUI();updateTypeTag();goto('home');
+  showLogin();renderLogin();
+}
 function updateAuthUI(){
   const el=document.getElementById('cloudStatus');
   if(el)el.innerHTML=AUTH.token?('已登录：'+AUTH.username+' · 云端保存 <a style="color:var(--brand-tx);cursor:pointer" onclick="logout()">退出</a>'):'<a style="color:var(--brand-tx);cursor:pointer" onclick="showLogin();renderLogin()">登录以保存数据</a>';
@@ -765,8 +780,15 @@ async function boot(){
     try{
       const lr=await fetch('/api/load',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:AUTH.token})});
       const lj=await lr.json();
-      if(lj.ok&&lj.data&&lj.data.stores){DB=lj.data;localStorage.setItem(DBK,JSON.stringify(DB));}
-      else if(!lj.ok){AUTH={token:'',username:''};} // token失效
+      if(lj.ok){
+        // 以云端为准：有数据用云端的，没数据就空白（不沿用本地旧缓存）
+        if(lj.data&&lj.data.stores&&lj.data.stores.length){DB=lj.data;}else{DB=seed();}
+        localStorage.setItem(DBK,JSON.stringify(DB));
+      }else{
+        // token 失效：清登录态和本地缓存
+        AUTH={token:'',username:''};localStorage.removeItem('zhican_token');localStorage.removeItem('zhican_user');
+        localStorage.removeItem(DBK);DB=seed();
+      }
     }catch(e){}
   }
   updateTypeTag();updateAuthUI();goto('home');checkBackend();

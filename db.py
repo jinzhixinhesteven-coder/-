@@ -118,3 +118,45 @@ def load_data(token):
 def whoami(token):
     user = _user_by_token(token)
     return user["username"] if user else None
+
+
+# ---------- 开发者后台：查看所有用户与其数据 ----------
+def admin_list_all():
+    """返回所有用户的概览 + 数据。仅供开发者用密钥访问。"""
+    out = []
+    with _conn() as c:
+        rows = c.execute("SELECT id, username, created_at, data FROM users ORDER BY id").fetchall()
+    for r in rows:
+        try:
+            data = json.loads(r["data"]) if r["data"] else None
+        except Exception:
+            data = None
+        stores = (data or {}).get("stores", []) if data else []
+        # 概览：店数、总记录天数、最近一条日期
+        store_summ = []
+        for s in stores:
+            recs = s.get("records", [])
+            dates = sorted([x.get("date", "") for x in recs])
+            store_summ.append({
+                "name": s.get("name", ""),
+                "type": s.get("type", ""),
+                "record_days": len(recs),
+                "first_date": dates[0] if dates else None,
+                "last_date": dates[-1] if dates else None,
+                "dishes": len(s.get("dishes", [])),
+            })
+        out.append({
+            "id": r["id"],
+            "username": r["username"],
+            "created_at": r["created_at"],
+            "store_count": len(stores),
+            "stores": store_summ,
+            "raw_data": data,   # 完整数据，开发者可展开看
+        })
+    return out
+
+
+def admin_stats():
+    with _conn() as c:
+        n = c.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+    return {"user_count": n, "db_path": DB_PATH}
