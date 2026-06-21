@@ -19,8 +19,12 @@ from openai import OpenAI
 # 兼容两种启动方式：本地 python main.py，云端 uvicorn backend.main:app
 try:
     from skill_prompt import RESTAURANT_ADVISOR_SKILL   # 本地从 backend/ 内运行
+    import db
 except ImportError:
     from backend.skill_prompt import RESTAURANT_ADVISOR_SKILL  # 从项目根运行
+    from backend import db
+
+db.init_db()   # 启动时建表（已存在则跳过）
 
 # ============ 读取你的 DeepSeek API Key ============
 # 优先从环境变量读取（更安全）；没有就读 config.json
@@ -127,6 +131,68 @@ async def chat(request: Request):
             yield f"（调用 AI 出错：{e}）"
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
+
+
+# ============ AI 每日点评（非流式，返回一句话）============
+@app.post("/api/daily")
+async def daily(request: Request):
+    """根据当日/近期数据，生成一句简短的经营点评。前端每天调用一次并缓存。"""
+    body = await request.json()
+    store_data = json.dumps(body, ensure_ascii=False)
+    if not API_KEY:
+        return {"ok": False, "text": ""}
+    try:
+        resp = get_client().chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": RESTAURANT_ADVISOR_SKILL},
+                {"role": "user", "content": (
+                    "下面是我餐厅今天和本月的数据。请用一两句话（60字内）给一句今日经营点评："
+                    "点出今天最值得注意的一个数（好或不好），并给一句可执行的小提示。"
+                    "专业、直接、口语化，不要标题不要列表，就一两句话。\n" + store_data
+                )},
+            ],
+            stream=False,
+            temperature=0.5,
+            max_tokens=200,
+        )
+        text = resp.choices[0].message.content.strip()
+        return {"ok": True, "text": text}
+    except Exception as e:
+        return {"ok": False, "text": f"（点评生成失败：{e}）"}
+
+
+# ============ 账号 & 数据持久化接口 ============
+@app.post("/api/register")
+async def api_register(request: Request):
+    b = await request.json()
+    ok, res = db.register(b.get("username", ""), b.get("password", ""))
+    if ok:
+        return {"ok": True, "token": res, "username": (b.get("username") or "").strip()}
+    return {"ok": False, "error": res}
+
+
+@app.post("/api/login")
+async def api_login(request: Request):
+    b = await request.json()
+    ok, res = db.login(b.get("username", ""), b.get("password", ""))
+    if ok:
+        return {"ok": True, "token": res, "username": (b.get("username") or "").strip()}
+    return {"ok": False, "error": res}
+
+
+@app.post("/api/save")
+async def api_save(request: Request):
+    b = await request.json()
+    ok, res = db.save_data(b.get("token", ""), b.get("data", {}))
+    return {"ok": ok, "msg": res}
+
+
+@app.post("/api/load")
+async def api_load(request: Request):
+    b = await request.json()
+    ok, msg, data = db.load_data(b.get("token", ""))
+    return {"ok": ok, "msg": msg, "data": data}
 
 
 # ============ 托管前端网页 ============

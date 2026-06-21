@@ -6,7 +6,7 @@
 <title>智餐经营 · 餐饮经营智能助手</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.34.1/tabler-icons.min.css">
-<link rel="stylesheet" href="style.css?v=20260608c">
+<link rel="stylesheet" href="style.css?v=20260609b">
 </head>
 <body>
 <div class="layout">
@@ -23,15 +23,20 @@
       <a data-p="dishes"><span class="i"><i class="ti ti-tools-kitchen"></i></span><span>菜品利润</span></a>
       <a data-p="ai"><span class="i"><i class="ti ti-stethoscope"></i></span><span>AI 诊断</span></a>
       <a data-p="chat"><span class="i"><i class="ti ti-message-circle"></i></span><span>AI 顾问</span></a>
+      <a data-p="compare"><span class="i"><i class="ti ti-building-store"></i></span><span>门店对比</span></a>
       <div class="navsec">管理</div>
       <a data-p="history"><span class="i"><i class="ti ti-database"></i></span><span>历史数据</span></a>
       <a data-p="settings"><span class="i"><i class="ti ti-settings"></i></span><span>门店设置</span></a>
     </nav>
+    <div class="side-foot" id="cloudStatus" style="border-bottom:1px solid var(--bd);padding-bottom:10px;margin-bottom:8px"></div>
     <div class="side-foot" id="aiStatus">AI：检测中…</div>
   </aside>
   <main class="main" id="main"></main>
 </div>
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260608c"></script>
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;background:rgba(31,35,41,.45);z-index:200;align-items:center;justify-content:center">
+  <div id="loginCard" style="background:var(--surface);border-radius:16px;padding:28px;width:360px;max-width:92vw;box-shadow:0 10px 40px rgba(20,28,45,.25)"></div>
+</div>
+<script src="app.js?v=20260609b"></script>
 </body>
 </html>

@@ -54,7 +54,28 @@ function seed(){
 }
 let DB=load();
 function load(){try{const s=localStorage.getItem(DBK);if(s){const o=JSON.parse(s);if(o.stores&&o.stores[0].records.length)return o;}}catch(e){}const d=seed();localStorage.setItem(DBK,JSON.stringify(d));return d;}
-function save(){localStorage.setItem(DBK,JSON.stringify(DB));}
+// ===== 登录态 =====
+let AUTH={token:localStorage.getItem('zhican_token')||'',username:localStorage.getItem('zhican_user')||''};
+let cloudSaveTimer=null;
+function save(){
+  localStorage.setItem(DBK,JSON.stringify(DB));         // 本地缓存(离线也能看)
+  // 已登录则同步到云端(防抖,避免每次改都发请求)
+  if(AUTH.token){
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer=setTimeout(syncToCloud,800);
+  }
+}
+async function syncToCloud(){
+  if(!AUTH.token)return;
+  try{
+    const r=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token:AUTH.token,data:DB})});
+    const j=await r.json();
+    const el=document.getElementById('cloudStatus');
+    if(j.ok){if(el)el.textContent='已云端保存 · '+AUTH.username;}
+    else{if(el)el.textContent='登录已过期，请重新登录';}
+  }catch(e){const el=document.getElementById('cloudStatus');if(el)el.textContent='离线(暂存本地)';}
+}
 function S(){return DB.stores[DB.activeStore];}
 function TY(){return TYPES[S().type];}
 function recsSorted(){return [...S().records].sort((a,b)=>a.date<b.date?-1:1);}
@@ -179,7 +200,7 @@ function emptyState(title,desc){
 PAGES.home=()=>{
   if(!S().records.length)return emptyState('欢迎使用智餐经营 <i class="ti ti-hand-stop"></i>','还没有数据。先到「门店设置」填好你的店，再到「录入数据」记下今天的营业额和来客数，系统就会自动帮你算利润、出报告。');
   const last=lastRecord();const today=dayProfit(last);const m=aggregate(periodRecords('month'));const [mi,mt]=motivLine();
-  setTimeout(()=>{renderMoneyFlow(last);renderProfitBars('homeBars');},80);
+  setTimeout(()=>{renderMoneyFlow(last);renderProfitBars('homeBars');loadDaily(m);},80);
   return `
   <div class="profit-hero">
     <div class="ph-lbl"><i class="ti ti-coin-yuan"></i> 今日净利润</div>
@@ -192,6 +213,11 @@ PAGES.home=()=>{
       ${cmpBox('对比上月同日',(f=>f?dayProfit(f):null)(findRelative(last.date,30)))}
     </div>
   </div>
+  <div class="aihero" id="dailyCard">
+    <div class="ai-head"><div class="ai-av"><i class="ti ti-robot"></i></div>
+      <div><div class="ai-nm">AI 今日点评</div><div class="ai-mt" id="dailyMeta">每天一句，帮你抓住重点</div></div></div>
+    <div class="ai-stream" id="dailyText"><span style="color:var(--tx2)"><i class="ti ti-loader-2"></i> 正在生成今日点评…</span></div>
+  </div>
   <div class="card"><h3><i class="ti ti-bulb"></i> 利润构成</h3><div class="sub">营业额扣除各项成本，剩下的就是净利润</div><div class="flow" id="moneyFlow"></div></div>
   <div class="grid4">
     <div class="kpi"><div class="l">本月累计利润</div><div class="v" style="color:var(--gr)">¥${fmt(m.profit)}</div><div class="bench">${m.days} 天</div></div>
@@ -199,9 +225,30 @@ PAGES.home=()=>{
     <div class="kpi"><div class="l">毛利率</div><div class="v">${m.gross}%</div><div class="bench">目标 ≥${m.t.grossTarget}%</div></div>
     <div class="kpi"><div class="l">客单价</div><div class="v">¥${m.avg}</div><div class="bench">来客 ${fmt(m.traffic)}</div></div>
   </div>
-  <div class="card"><h3><i class="ti ti-trending-up"></i> 本月每日利润</h3><div class="sub">绿色为高于平均的日子</div><canvas id="homeBars"></canvas></div>
-  <div class="card" style="border-left:3px solid var(--gr)"><h3>${mi} AI 提醒</h3><div style="font-size:14.5px;color:#c8d3e4;line-height:1.6">${mt}</div></div>`;
+  <div class="card"><h3><i class="ti ti-trending-up"></i> 本月每日利润</h3><div class="sub">绿色为高于平均的日子</div><canvas id="homeBars"></canvas></div>`;
 };
+// AI 今日点评：每天每店生成一次并缓存(存 localStorage)
+async function loadDaily(m){
+  const el=document.getElementById('dailyText');const meta=document.getElementById('dailyMeta');if(!el)return;
+  const today=new Date().toISOString().slice(0,10);
+  const cacheKey='daily_'+(AUTH.username||'local')+'_'+S().name+'_'+today;
+  const cached=localStorage.getItem(cacheKey);
+  if(cached){el.innerHTML=mdToHtml(cached);if(meta)meta.textContent='今日点评 · '+today;return;}
+  // 没缓存就生成
+  try{
+    const r=await fetch('/api/daily',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(aiPayload(m))});
+    const j=await r.json();
+    if(j.ok&&j.text){localStorage.setItem(cacheKey,j.text);el.innerHTML=mdToHtml(j.text);if(meta)meta.textContent='今日点评 · '+today;}
+    else{el.innerHTML=mdToHtml(localDaily(m));if(meta)meta.textContent='今日点评（本地）';}
+  }catch(e){el.innerHTML=mdToHtml(localDaily(m));if(meta)meta.textContent='今日点评（本地）';}
+}
+// 后端不可用时的本地点评(基于真实数据,不编造)
+function localDaily(m){const ct=costTarget(m);const last=lastRecord();const today=dayProfit(last);const y=findRelative(last.date,1);
+  if(y&&dayProfit(y)>0&&today>dayProfit(y)*1.1)return `今天净利润 ¥${fmt(today)}，比昨天高，状态不错。守住这个节奏，留意别为冲量乱打折。`;
+  if(ct.monthExtra>800)return `本月净利率 ${m.netP}%。成本偏高是主要短板——食材 ${m.foodP}%、人力 ${m.laborP}%，压回标准线约多赚 ¥${fmt(ct.monthExtra)}/月，今天先从控损耗做起。`;
+  if(m.netP>=m.b.net[0])return `本月净利率 ${m.netP}%，达标且不错。成本控制住了，今天把精力放在提客单价和招牌菜推荐上。`;
+  return `今天净利润 ¥${fmt(today)}，本月累计 ¥${fmt(m.profit)}。保持每天录入，数据越全，分析越准。`;
+}
 
 /* ===== 录入数据 ===== */
 PAGES.entry=()=>{const last=lastRecord();const t=TY();
@@ -235,10 +282,57 @@ PAGES.entry=()=>{const last=lastRecord();const t=TY();
 /* ===== 经营报告 ===== */
 let curPeriod='month';
 PAGES.report=()=>{setTimeout(renderReport,60);
-  return `<div class="segbar" id="segbar">
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div class="segbar" id="segbar">
     ${['day','week','month','quarter','year'].map(p=>`<div class="seg ${p===curPeriod?'active':''}" data-p="${p}" onclick="curPeriod='${p}';renderReport();document.querySelectorAll('#segbar .seg').forEach(s=>s.classList.toggle('active',s.dataset.p==='${p}'))">${({day:'日报',week:'周报',month:'月报',quarter:'季报',year:'年报'})[p]}</div>`).join('')}
+    </div>
+    <button class="btn ghost sm" onclick="exportReport()"><i class="ti ti-download"></i> 导出/打印</button>
   </div><div id="reportBody"></div>`;
 };
+// 导出经营报告：生成一页干净的报告,调用浏览器打印(可存为PDF)
+function exportReport(){
+  const recs=periodRecords(curPeriod),prev=prevPeriodRecords(curPeriod);
+  const m=aggregate(recs),pm=prev.length?aggregate(prev):null;
+  if(!m){toast('还没有数据可导出');return;}
+  const ct=costTarget(m);
+  const periodName={day:'日报',week:'周报',month:'月报',quarter:'季报',year:'年报'}[curPeriod];
+  const pl={day:'昨日',week:'上周',month:'上月',quarter:'上季',year:'去年'}[curPeriod];
+  const chTxt=(c,b)=>{if(!b)return'';const v=pctChange(c,b);return (v>=0?'▲ +':'▼ ')+Math.abs(v).toFixed(0)+'%';};
+  const rows=[['食材成本率',m.foodP+'%',m.b.food[0]+'–'+m.b.food[1]+'%'],['人力成本率',m.laborP+'%',m.b.labor[0]+'–'+m.b.labor[1]+'%'],
+    ['主成本',m.prime+'%','≤'+m.b.prime[1]+'%'],['净利率',m.netP+'%',m.b.net[0]+'–'+m.b.net[1]+'%'],['毛利率',m.gross+'%','≥'+m.t.grossTarget+'%']];
+  const html=`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${S().name} ${periodName}</title>
+  <style>
+    body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#1f2329;max-width:760px;margin:30px auto;padding:0 24px;line-height:1.6}
+    h1{font-size:24px;margin:0 0 4px} .meta{color:#5f6571;font-size:13px;margin-bottom:24px}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+    .kpi{border:1px solid #e8eaed;border-radius:10px;padding:14px}
+    .kpi .l{font-size:12px;color:#5f6571} .kpi .v{font-size:22px;font-weight:600;margin-top:6px} .kpi .c{font-size:12px;color:#118a5e}
+    table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px}
+    th,td{padding:9px 8px;text-align:left;border-bottom:1px solid #e8eaed} th{color:#5f6571;font-weight:500}
+    .box{border:1px solid #e8eaed;border-radius:10px;padding:16px;margin-bottom:16px;font-size:14px}
+    .foot{color:#9aa0ac;font-size:12px;margin-top:30px;border-top:1px solid #e8eaed;padding-top:12px}
+    @media print{body{margin:0}}
+  </style></head><body>
+  <h1>${S().name} · 经营${periodName}</h1>
+  <div class="meta">业态：${m.t.label} · 统计区间：近 ${m.days} 天 · 生成日期：${new Date().toISOString().slice(0,10)}${AUTH.username?' · '+AUTH.username:''}</div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">营业额</div><div class="v">¥${fmt(m.rev)}</div><div class="c">${pm?'对比'+pl+' '+chTxt(m.rev,pm.rev):''}</div></div>
+    <div class="kpi"><div class="l">净利润</div><div class="v">¥${fmt(m.profit)}</div><div class="c">净利率 ${m.netP}%</div></div>
+    <div class="kpi"><div class="l">来客数</div><div class="v">${fmt(m.traffic)}</div><div class="c">客单价 ¥${m.avg}</div></div>
+    <div class="kpi"><div class="l">日均营业额</div><div class="v">¥${fmt(m.rev/m.days)}</div><div class="c">${m.days} 天</div></div>
+  </div>
+  <h3>经营指标对标</h3>
+  <table><tr><th>指标</th><th>本期</th><th>健康标准</th></tr>
+    ${rows.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td></tr>`).join('')}
+  </table>
+  ${!ct.onTrack?`<div class="box"><b>成本优化空间：</b>食材目标 ${ct.targetFoodP}%、人力目标 ${ct.targetLaborP}%，达标后约多赚 ¥${fmt(ct.monthExtra)}/月（净利率 ${m.netP}% → ${ct.targetNetP}%）。</div>`:`<div class="box"><b>成本控制良好：</b>各项成本在健康区间，净利率 ${m.netP}%，建议重心转向提升营业额与客单价。</div>`}
+  <div class="foot">本报告由「智餐经营」自动生成。数据来源：门店实际录入。</div>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('请允许弹窗以导出报告');return;}
+  w.document.write(html);w.document.close();
+  setTimeout(()=>{w.print();},400);
+}
 function renderReport(){const recs=periodRecords(curPeriod),prev=prevPeriodRecords(curPeriod);
   const m=aggregate(recs),pm=prev.length?aggregate(prev):null;
   if(!m){document.getElementById('reportBody').innerHTML=emptyState('还没有数据','录入几天的营业额后，这里会自动生成日报、周报、月报。');return;}
@@ -448,6 +542,54 @@ function initChat(){const m=aggregate(periodRecords('month'));const box=document
   document.getElementById('chatChips').innerHTML=['本月经营情况如何？','如何提升利润？','怎么降成本？','哪道菜该提价？'].map(c=>`<span class="chip" onclick="askPreset(\`${c}\`)">${c}</span>`).join('')
     +(log.length?`<span class="chip" style="opacity:.7" onclick="clearChat()"><i class="ti ti-trash"></i> 清空对话</span>`:'');}
 
+/* ===== 多店对比 ===== */
+// 聚合任意一家店近30天的关键指标(不依赖 activeStore)
+function aggForStore(store){
+  const t=TYPES[store.type];if(!t)return null;
+  const recs=[...store.records].sort((a,b)=>a.date<b.date?-1:1);if(!recs.length)return null;
+  const last=recs[recs.length-1];const end=new Date(last.date);const start=new Date(end);start.setDate(end.getDate()-29);
+  const s0=start.toISOString().slice(0,10);const m30=recs.filter(r=>r.date>=s0);
+  const sum=k=>m30.reduce((a,r)=>a+(+r[k]||0),0);
+  const rev=sum('rev'),food=sum('food'),labor=sum('labor'),traffic=sum('traffic'),days=m30.length;
+  const other=rev*store.fixedOther,rent=store.rent/30*days;
+  const profit=rev-food-labor-other-rent;
+  const foodP=rev?+(food/rev*100).toFixed(1):0,laborP=rev?+(labor/rev*100).toFixed(1):0;
+  const netP=rev?+(profit/rev*100).toFixed(1):0,avg=traffic?+(rev/traffic).toFixed(1):0;
+  const sqm=store.area?Math.round(rev/days*30/store.area):0;
+  return {name:store.name,type:t.label,rev,profit,netP,avg,foodP,laborP,traffic,days,sqm,b:t.bench};
+}
+PAGES.compare=()=>{
+  const stats=DB.stores.map(aggForStore).filter(Boolean);
+  if(DB.stores.length<2)return `<div class="card"><div class="empty-wrap"><div class="ei"><i class="ti ti-building-store"></i></div>
+    <h3 style="justify-content:center">只有一家店</h3><div class="sub" style="max-width:380px;margin:8px auto 18px">门店对比需要至少 2 家店。点右上角门店下拉里的「+ 新增门店」添加第二家，录入数据后就能横向对比了。</div>
+    <button class="btn" onclick="addStore()"><i class="ti ti-plus"></i> 新增门店</button></div></div>`;
+  if(!stats.length)return `<div class="card"><div class="empty-wrap"><div class="ei"><i class="ti ti-database"></i></div><h3 style="justify-content:center">还没有数据</h3><div class="sub">各门店先录入数据后才能对比。</div></div></div>`;
+  // 按净利润排名
+  const byProfit=[...stats].sort((a,b)=>b.profit-a.profit);
+  const best=byProfit[0],worst=byProfit[byProfit.length-1];
+  setTimeout(()=>renderCompareChart('cmpChart',stats),60);
+  const row=(s,i)=>{const isW=s.name===worst.name&&stats.length>1;const isB=s.name===best.name;
+    return `<tr${isW?' style="background:var(--rd-soft)"':isB?' style="background:var(--gr-soft)"':''}>
+      <td><b>${i+1}. ${s.name}</b> ${isB?'<span class="tag chen">最佳</span>':isW?'<span class="tag shi">需关注</span>':''}</td>
+      <td>${s.type}</td><td>¥${fmt(s.rev)}</td>
+      <td style="font-weight:600;color:${s.profit>=0?'var(--gr)':'var(--rd)'}">¥${fmt(s.profit)}</td>
+      <td style="color:${s.netP>=s.b.net[0]?'var(--gr)':'var(--rd)'}">${s.netP}%</td>
+      <td>¥${s.avg}</td><td>${s.foodP}%</td><td>${s.laborP}%</td></tr>`;};
+  return `
+  <div class="card"><h3><i class="ti ti-chart-bar"></i> 各店净利润对比（近30天）</h3><div class="sub">绿色=表现最佳，红色=最需关注</div>
+    <canvas id="cmpChart"></canvas></div>
+  <div class="card"><h3><i class="ti ti-list-details"></i> 门店排名明细</h3>
+    <table><tr><th>门店</th><th>业态</th><th>营业额</th><th>净利润</th><th>净利率</th><th>客单价</th><th>食材率</th><th>人力率</th></tr>
+    ${byProfit.map(row).join('')}</table>
+    <div class="note">提示：点右上角门店下拉可切换到某家店查看它的详细诊断。${stats.length>1&&worst.netP<worst.b.net[0]?`<br><b style="color:var(--rd)">${worst.name}</b> 净利率 ${worst.netP}% 低于标准，建议优先排查它的成本结构和客流。`:''}</div>
+  </div>`;
+};
+function renderCompareChart(id,stats){const el=document.getElementById(id);if(!el)return;
+  charts[id]=new Chart(el,{type:'bar',data:{labels:stats.map(s=>s.name),datasets:[
+    {label:'营业额',data:stats.map(s=>s.rev),backgroundColor:'#f0997b'},
+    {label:'净利润',data:stats.map(s=>s.profit),backgroundColor:'#1a9e6f'}]},
+    options:{plugins:{legend:{labels:{color:'#5f6571'}}},scales:AX}});}
+
 /* ===== 历史 & 设置 ===== */
 PAGES.history=()=>{const recs=recsSorted().reverse();const t=TY();
   return `<div class="card"><h3><i class="ti ti-database"></i> 历史数据（${recs.length} 天）</h3><div class="sub">数据持久保存在本地。</div>
@@ -537,10 +679,98 @@ let curP='home';
 function render(){goto(curP);}
 function goto(p){curP=p;killCharts();
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.p===p));
-  const T={home:'今日利润',entry:'录入数据',report:'经营报告',dishes:'菜品利润',ai:'AI 诊断',chat:'AI 顾问',history:'历史数据',settings:'门店设置'};
-  const D={home:'今日真实净利润与对比',entry:'每日录入，自动累积核算',report:'日/周/月/季/年自动生成',dishes:'每道菜的成本利润与调整建议',ai:'AI 诊断经营状况并给建议',chat:'随时咨询 AI 餐饮顾问',history:'全部历史数据',settings:'门店与业态设置'};
-  document.getElementById('main').innerHTML=`<div class="phead"><div><h1>${T[p]}</h1><div class="d">${D[p]}</div></div><div><select class="sel"><option>${S().name}</option></select></div></div><div id="body"></div>`;
+  const T={home:'今日利润',entry:'录入数据',report:'经营报告',dishes:'菜品利润',ai:'AI 诊断',chat:'AI 顾问',compare:'门店对比',history:'历史数据',settings:'门店设置'};
+  const D={home:'今日真实净利润与对比',entry:'每日录入，自动累积核算',report:'日/周/月/季/年自动生成',dishes:'每道菜的成本利润与调整建议',ai:'AI 诊断经营状况并给建议',chat:'随时咨询 AI 餐饮顾问',compare:'多家门店横向对比，找出谁拖后腿',history:'全部历史数据',settings:'门店与业态设置'};
+  // 门店切换器(多店时显示下拉,可切换/新增)
+  const storeSelector=`<select class="sel" onchange="switchStore(this.value)">
+    ${DB.stores.map((s,i)=>`<option value="${i}" ${i===DB.activeStore?'selected':''}>${s.name}</option>`).join('')}
+    <option value="__add__">+ 新增门店</option>
+  </select>`;
+  document.getElementById('main').innerHTML=`<div class="phead"><div><h1>${T[p]}</h1><div class="d">${D[p]}</div></div><div>${storeSelector}</div></div><div id="body"></div>`;
   document.getElementById('body').innerHTML=PAGES[p]();
 }
+// 切换/新增门店
+function switchStore(v){
+  if(v==='__add__'){addStore();return;}
+  DB.activeStore=+v;save();updateTypeTag();
+  // 切换后重置每日点评缓存的引用,重新渲染
+  goto(curP);toast('已切换到 '+S().name);
+}
+function addStore(){
+  const name=prompt('新门店名称：','我的新店');
+  if(!name){goto(curP);return;}
+  const ns=newStore('快餐');ns.name=name.trim();ns.records=[];ns.dishes=[];
+  DB.stores.push(ns);DB.activeStore=DB.stores.length-1;save();updateTypeTag();
+  toast('已新增门店，先去「门店设置」完善信息');goto('settings');
+}
 document.getElementById('nav').addEventListener('click',e=>{const a=e.target.closest('a');if(a)goto(a.dataset.p);});
-updateTypeTag();goto('home');checkBackend();
+
+/* ===== 登录 / 注册 ===== */
+function showLogin(){
+  document.getElementById('loginOverlay').style.display='flex';
+}
+function hideLogin(){document.getElementById('loginOverlay').style.display='none';}
+let loginMode='login'; // login | register
+function toggleLoginMode(){loginMode=loginMode==='login'?'register':'login';renderLogin();}
+function renderLogin(){
+  const isLogin=loginMode==='login';
+  document.getElementById('loginCard').innerHTML=`
+    <div style="font-size:21px;font-weight:600;margin-bottom:4px">${isLogin?'登录':'注册新账号'}</div>
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:18px">${isLogin?'登录后你的数据会安全保存在云端，换设备也能看到。':'设个用户名和密码，之后用它登录。数据长期保存。'}</div>
+    <div class="field"><label>用户名</label><input id="lg_user" placeholder="给自己起个名字" value="${AUTH.username||''}"></div>
+    <div class="field"><label>密码（至少4位）</label><input id="lg_pw" type="password" placeholder="${isLogin?'你的密码':'设一个密码'}" onkeydown="if(event.key==='Enter')doAuth()"></div>
+    <div id="lg_err" style="color:var(--rd);font-size:13px;min-height:18px;margin-bottom:8px"></div>
+    <button class="btn" style="width:100%;justify-content:center" onclick="doAuth()">${isLogin?'登录':'注册并开始'}</button>
+    <div style="text-align:center;margin-top:14px;font-size:13px;color:var(--tx2)">
+      ${isLogin?'还没有账号？':'已经有账号了？'}
+      <a style="color:var(--brand-tx);cursor:pointer;font-weight:500" onclick="toggleLoginMode()">${isLogin?'去注册':'去登录'}</a>
+    </div>
+    <div style="text-align:center;margin-top:10px"><a style="color:var(--tx3);cursor:pointer;font-size:12px" onclick="skipLogin()">先不登录，本地试用（数据可能丢失）</a></div>`;
+}
+async function doAuth(){
+  const user=document.getElementById('lg_user').value.trim();
+  const pw=document.getElementById('lg_pw').value;
+  const err=document.getElementById('lg_err');
+  if(!user||!pw){err.textContent='请填用户名和密码';return;}
+  err.textContent='处理中…';
+  try{
+    const r=await fetch('/api/'+(loginMode==='login'?'login':'register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,password:pw})});
+    const j=await r.json();
+    if(!j.ok){err.textContent=j.error||'失败了，再试一次';return;}
+    // 成功
+    AUTH.token=j.token;AUTH.username=j.username;
+    localStorage.setItem('zhican_token',j.token);localStorage.setItem('zhican_user',j.username);
+    // 登录：从云端拉数据；注册：把当前本地数据推上云
+    if(loginMode==='login'){
+      const lr=await fetch('/api/load',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:j.token})});
+      const lj=await lr.json();
+      if(lj.ok&&lj.data&&lj.data.stores){DB=lj.data;localStorage.setItem(DBK,JSON.stringify(DB));}
+    }else{
+      await syncToCloud();
+    }
+    hideLogin();updateAuthUI();updateTypeTag();goto('home');
+    toast('欢迎，'+AUTH.username);
+  }catch(e){err.textContent='连不上服务器，检查网络';}
+}
+function skipLogin(){hideLogin();toast('本地试用模式，建议尽快注册以保存数据');}
+function logout(){AUTH={token:'',username:''};localStorage.removeItem('zhican_token');localStorage.removeItem('zhican_user');updateAuthUI();showLogin();renderLogin();}
+function updateAuthUI(){
+  const el=document.getElementById('cloudStatus');
+  if(el)el.innerHTML=AUTH.token?('已登录：'+AUTH.username+' · 云端保存 <a style="color:var(--brand-tx);cursor:pointer" onclick="logout()">退出</a>'):'<a style="color:var(--brand-tx);cursor:pointer" onclick="showLogin();renderLogin()">登录以保存数据</a>';
+}
+
+// ===== 启动：先尝试用已存 token 拉云端数据，再渲染 =====
+async function boot(){
+  if(AUTH.token){
+    try{
+      const lr=await fetch('/api/load',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:AUTH.token})});
+      const lj=await lr.json();
+      if(lj.ok&&lj.data&&lj.data.stores){DB=lj.data;localStorage.setItem(DBK,JSON.stringify(DB));}
+      else if(!lj.ok){AUTH={token:'',username:''};} // token失效
+    }catch(e){}
+  }
+  updateTypeTag();updateAuthUI();goto('home');checkBackend();
+  // 没登录就弹登录框（但允许跳过）
+  if(!AUTH.token){renderLogin();showLogin();}
+}
+boot();
